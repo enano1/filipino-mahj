@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 import Lobby from './components/Lobby';
 import GameBoard from './components/GameBoard';
+import EnvDebug from './EnvDebug';
 
 // WebSocket URL - must be set in environment variables for production
 const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:3001';
 
 // Log the WebSocket URL for debugging
 console.log('WebSocket URL:', WS_URL);
+console.log('All REACT_APP_ env vars:', Object.keys(process.env).filter(k => k.startsWith('REACT_APP_')));
 
 function App() {
-  const [ws, setWs] = useState(null);
   const [connected, setConnected] = useState(false);
   const [roomCode, setRoomCode] = useState(null);
   const [playerIndex, setPlayerIndex] = useState(-1);
@@ -20,17 +21,7 @@ function App() {
   
   const wsRef = useRef(null);
 
-  useEffect(() => {
-    connectWebSocket();
-    
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
-
-  const connectWebSocket = () => {
+  const connectWebSocket = useCallback(() => {
     const websocket = new WebSocket(WS_URL);
     
     websocket.onopen = () => {
@@ -119,8 +110,17 @@ function App() {
     };
     
     wsRef.current = websocket;
-    setWs(websocket);
-  };
+  }, []);
+
+  useEffect(() => {
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [connectWebSocket]);
 
   const sendMessage = (data) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -208,4 +208,3 @@ function App() {
 }
 
 export default App;
-

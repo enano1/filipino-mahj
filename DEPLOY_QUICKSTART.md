@@ -15,9 +15,10 @@ git push -u origin main
 1. Go to [railway.app](https://railway.app)
 2. Click "New Project" → "Deploy from GitHub repo"
 3. Select your repository
-4. Railway auto-detects and deploys!
-5. Click your service → "Settings" → "Generate Domain"
-6. Copy your URL: `https://filipino-mahjong-production.up.railway.app`
+4. **Important**: Click service → Settings → Set "Root Directory" to `backend`
+5. Railway will redeploy automatically
+6. Click "Settings" → "Generate Domain"
+7. Copy your URL: `https://filipino-mahjong-production.up.railway.app`
 
 ### Step 3: Deploy Frontend (Vercel)
 1. Go to [vercel.com](https://vercel.com)

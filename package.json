@@ -2,14 +2,20 @@
   "name": "filipino-mahjong",
   "version": "1.0.0",
   "description": "Online multiplayer Filipino Mahjong game",
+  "main": "backend/server.js",
   "scripts": {
-    "server": "node backend/server.js",
+    "start": "cd backend && node server.js",
+    "server": "cd backend && node server.js",
     "client": "cd frontend && npm start",
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "install-all": "npm install && cd frontend && npm install"
+    "install-backend": "cd backend && npm install",
+    "install-frontend": "cd frontend && npm install",
+    "install-all": "npm run install-backend && npm run install-frontend",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
   },
   "keywords": ["mahjong", "filipino", "multiplayer", "websocket"],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.x"
+  }
 }
-

@@ -3,11 +3,11 @@ import './App.css';
 import Lobby from './components/Lobby';
 import GameBoard from './components/GameBoard';
 
-// WebSocket URL - automatically uses production URL when deployed
-const WS_URL = process.env.REACT_APP_WS_URL || 
-  (window.location.protocol === 'https:' 
-    ? `wss://${window.location.hostname}:3001`
-    : 'ws://localhost:3001');
+// WebSocket URL - must be set in environment variables for production
+const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:3001';
+
+// Log the WebSocket URL for debugging
+console.log('WebSocket URL:', WS_URL);
 
 function App() {
   const [ws, setWs] = useState(null);

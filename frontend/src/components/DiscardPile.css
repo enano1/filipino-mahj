@@ -1,0 +1,28 @@
+.discard-pile {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  min-width: 400px;
+}
+
+.discard-pile h3 {
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+}
+
+.discard-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 100px;
+  align-items: center;
+}
+
+.empty-message {
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+

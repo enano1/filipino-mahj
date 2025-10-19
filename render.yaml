@@ -1,0 +1,26 @@
+services:
+  # Backend Service
+  - type: web
+    name: filipino-mahjong-backend
+    env: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+    
+  # Frontend Static Site
+  - type: web
+    name: filipino-mahjong-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
+    envVars:
+      - key: REACT_APP_WS_URL
+        fromService:
+          name: filipino-mahjong-backend
+          type: web
+          property: host
+

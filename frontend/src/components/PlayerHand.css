@@ -1,0 +1,23 @@
+.player-hand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.player-hand h3 {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+}
+
+.hand-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.5rem;
+  min-height: 90px;
+  align-items: center;
+}
+

@@ -1,0 +1,136 @@
+.action-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.action-section,
+.claim-section {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.action-section h4,
+.claim-section h4 {
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.action-buttons,
+.claim-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
+  flex: 1;
+  min-width: 150px;
+}
+
+.draw-btn {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.draw-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.discard-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.discard-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.claim-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.claim-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.pass-btn {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+.pass-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.claim-section {
+  border: 2px solid #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  animation: highlight 1s ease-in-out infinite;
+}
+
+@keyframes highlight {
+  0%, 100% { border-color: #fbbf24; }
+  50% { border-color: #f59e0b; }
+}
+
+.claim-message {
+  color: #fbbf24;
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
+}
+
+.claim-message strong {
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.chow-options {
+  margin-bottom: 1rem;
+}
+
+.options-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 0.5rem;
+}
+
+.chow-option {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.chow-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #3b82f6;
+}
+
+.chow-option.selected {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.2);
+}
+

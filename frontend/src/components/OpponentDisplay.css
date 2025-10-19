@@ -1,0 +1,64 @@
+.opponent-display {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  min-width: 200px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition: border-color 0.3s;
+}
+
+.opponent-display.active {
+  border-color: #4ade80;
+}
+
+.opponent-top {
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.opponent-right {
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.opponent-left {
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.opponent-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.opponent-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.active-indicator {
+  font-size: 1rem;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.opponent-melds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.opponent-meld {
+  display: flex;
+  gap: 0.15rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+}
+

@@ -42,7 +42,9 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     .map(idx => ({
       position: ['top', 'right', 'left'][(idx - playerIndex + 4) % 4 - 1],
       playerIndex: idx,
-      melds: gameState.melds[idx]
+      melds: gameState.melds[idx],
+      isAI: gameState.players[idx]?.isAI || false,
+      name: gameState.players[idx]?.name || `Player ${idx + 1}`
     }));
 
   return (
@@ -69,6 +71,8 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
             playerIndex={opp.playerIndex}
             melds={opp.melds}
             isActive={gameState.currentTurn === opp.playerIndex}
+            isAI={opp.isAI}
+            name={opp.name}
           />
         ))}
 

@@ -39,6 +39,74 @@ const wss = new WebSocket.Server({
 // Store active rooms
 const rooms = new Map();
 
+// AI Player class for test room
+class AIPlayer {
+  constructor(playerIndex, room) {
+    this.playerIndex = playerIndex;
+    this.room = room;
+    this.name = `AI Player ${playerIndex + 1}`;
+    this.isAI = true;
+  }
+
+  // AI makes a move after a short delay
+  makeMove() {
+    setTimeout(() => {
+      if (this.room.state !== 'playing' || this.room.currentTurn !== this.playerIndex) {
+        return;
+      }
+
+      const hand = this.room.hands[this.playerIndex];
+      
+      // Simple AI: if we have 14 tiles, discard one randomly
+      if (hand.length === 14) {
+        const randomTile = hand[Math.floor(Math.random() * hand.length)];
+        
+        // Remove tile from hand
+        const tileIndex = hand.indexOf(randomTile);
+        hand.splice(tileIndex, 1);
+        this.room.hands[this.playerIndex] = sortHand(hand);
+        
+        // Add to discard pile
+        this.room.discardPile.push(randomTile);
+        this.room.lastDiscard = {
+          tile: randomTile,
+          playerIndex: this.playerIndex,
+          timestamp: Date.now()
+        };
+
+        // Move to next turn
+        this.room.currentTurn = (this.room.currentTurn + 1) % 4;
+        this.room.lastActivity = Date.now();
+
+        broadcastGameState(this.room);
+        broadcastToRoom(this.room, {
+          type: 'ai-move',
+          message: `${this.name} discarded ${randomTile}`
+        });
+      }
+      // If we have 13 tiles, draw one
+      else if (hand.length === 13) {
+        handleDraw(this.room, this.playerIndex);
+      }
+    }, 1000 + Math.random() * 2000); // Random delay 1-3 seconds
+  }
+
+  // AI responds to claims
+  respondToClaim(actionType, tile) {
+    setTimeout(() => {
+      // Simple AI: sometimes claim, sometimes pass
+      const shouldClaim = Math.random() < 0.3; // 30% chance to claim
+      
+      if (shouldClaim) {
+        // For now, AI just passes on claims
+        handlePass(this.room, this.playerIndex);
+      } else {
+        handlePass(this.room, this.playerIndex);
+      }
+    }, 500 + Math.random() * 1000); // Random delay 0.5-1.5 seconds
+  }
+}
+
 // Generate a unique 4-character room code
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -119,28 +187,42 @@ function startGame(room) {
   
   broadcastToRoom(room, {
     type: 'game-started',
-    message: 'Game started! Player 1\'s turn.'
+    message: room.isTestRoom ? 'Test game started! You vs 3 AI players.' : 'Game started! Player 1\'s turn.'
   });
 }
 
 // Broadcast current game state to all players
 function broadcastGameState(room) {
   room.players.forEach((player, index) => {
-    sendToPlayer(player, {
-      type: 'game-state',
-      state: {
-        playerIndex: index,
-        hand: room.hands[index],
-        melds: room.melds,
-        discardPile: room.discardPile,
-        currentTurn: room.currentTurn,
-        lastDiscard: room.lastDiscard,
-        wallRemaining: room.wall.length,
-        players: room.players.map(p => ({ id: p.id, name: p.name })),
-        winner: room.winner
-      }
-    });
+    if (player && player.ws) {
+      sendToPlayer(player, {
+        type: 'game-state',
+        state: {
+          playerIndex: index,
+          hand: room.hands[index],
+          melds: room.melds,
+          discardPile: room.discardPile,
+          currentTurn: room.currentTurn,
+          lastDiscard: room.lastDiscard,
+          wallRemaining: room.wall.length,
+          players: room.players.map(p => p ? ({ id: p.id, name: p.name, isAI: p.isAI }) : null),
+          winner: room.winner,
+          isTestRoom: room.isTestRoom
+        }
+      });
+    }
   });
+  
+  // Trigger AI moves for test room
+  if (room.isTestRoom && room.state === 'playing') {
+    const currentPlayer = room.players[room.currentTurn];
+    if (currentPlayer && currentPlayer.isAI && room.aiPlayers) {
+      const aiPlayer = room.aiPlayers.find(ai => ai.playerIndex === room.currentTurn);
+      if (aiPlayer) {
+        aiPlayer.makeMove();
+      }
+    }
+  }
 }
 
 // Handle player drawing a tile
@@ -395,6 +477,81 @@ wss.on('connection', (ws) => {
           break;
           
         case 'join-room':
+          // Special test room 9999
+          if (data.roomCode === '9999') {
+            let testRoom = rooms.get('9999');
+            
+            if (!testRoom) {
+              // Create test room with 3 AI players
+              testRoom = createRoom('9999');
+              testRoom.isTestRoom = true;
+              testRoom.aiPlayers = [];
+              
+              // Create 3 AI players
+              for (let i = 1; i < 4; i++) {
+                const aiPlayer = new AIPlayer(i, testRoom);
+                testRoom.aiPlayers.push(aiPlayer);
+                testRoom.players[i] = {
+                  id: `ai-${i}`,
+                  name: aiPlayer.name,
+                  ws: null,
+                  isAI: true
+                };
+                testRoom.playerNames[i] = aiPlayer.name;
+              }
+              
+              rooms.set('9999', testRoom);
+              console.log('🤖 Created test room 9999 with 3 AI players');
+            }
+            
+            // Join as player 0 (human player)
+            const humanPlayer = {
+              id: clientId,
+              name: data.playerName || 'Test Player',
+              ws,
+              isAI: false
+            };
+            
+            testRoom.players[0] = humanPlayer;
+            testRoom.playerNames[0] = humanPlayer.name;
+            testRoom.lastActivity = Date.now();
+            
+            currentRoom = testRoom;
+            playerIndex = 0;
+            
+            ws.send(JSON.stringify({
+              type: 'room-joined',
+              roomCode: '9999',
+              playerIndex: 0,
+              isTestRoom: true,
+              gameState: testRoom.state !== 'waiting' ? {
+                playerIndex: 0,
+                hand: testRoom.hands[0] || [],
+                melds: testRoom.melds[0] || [],
+                discardPile: testRoom.discardPile,
+                currentTurn: testRoom.currentTurn,
+                lastDiscard: testRoom.lastDiscard,
+                wallRemaining: testRoom.wall.length,
+                players: testRoom.players.map(p => ({ id: p.id, name: p.name, isAI: p.isAI })),
+                winner: testRoom.winner
+              } : null
+            }));
+            
+            broadcastToRoom(testRoom, {
+              type: 'player-joined',
+              playerCount: 4,
+              players: testRoom.players.map(p => ({ id: p.id, name: p.name, isAI: p.isAI })),
+              isTestRoom: true
+            });
+            
+            // Start game immediately in test room
+            if (testRoom.state === 'waiting') {
+              setTimeout(() => startGame(testRoom), 1000);
+            }
+            
+            break;
+          }
+          
           const room = rooms.get(data.roomCode);
           
           if (!room) {

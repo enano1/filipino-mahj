@@ -46,7 +46,9 @@ function App() {
           setPlayerIndex(data.playerIndex);
           setMessage(data.isRejoin 
             ? `Rejoined room: ${data.roomCode}` 
-            : `Joined room: ${data.roomCode}`);
+            : data.isTestRoom 
+              ? `Joined test room ${data.roomCode} - You vs 3 AI players!`
+              : `Joined room: ${data.roomCode}`);
           
           // If rejoining mid-game, set the game state
           if (data.gameState) {
@@ -64,6 +66,11 @@ function App() {
           
         case 'game-started':
           setMessage(data.message);
+          break;
+          
+        case 'ai-move':
+          setMessage(data.message);
+          setTimeout(() => setMessage(''), 2000);
           break;
           
         case 'game-state':

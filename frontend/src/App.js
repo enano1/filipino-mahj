@@ -155,6 +155,11 @@ function App() {
     setActionAvailable(null);
   };
 
+  // Show debug page if ?debug is in URL
+  if (window.location.search.includes('debug')) {
+    return <EnvDebug />;
+  }
+
   return (
     <div className="App">
       <header className="App-header">

@@ -63,7 +63,11 @@ function createRoom(roomCode) {
     currentTurn: 0,
     lastDiscard: null,
     pendingActions: [], // For pong/kong/chow claims
-    winner: null
+    winner: null,
+    createdAt: Date.now(),
+    lastActivity: Date.now(),
+    maxIdleTime: 30 * 60 * 1000, // 30 minutes in milliseconds
+    playerNames: ['', '', '', ''] // Store player names for rejoin
   };
 }
 
@@ -152,6 +156,7 @@ function handleDraw(room, playerIndex) {
     return;
   }
   
+  room.lastActivity = Date.now(); // Update activity
   const drawnTile = room.wall.shift();
   
   // Check if it's an auto-redraw tile
@@ -181,6 +186,8 @@ function handleDraw(room, playerIndex) {
 function handleDiscard(room, playerIndex, tile) {
   if (room.state !== 'playing') return;
   if (room.currentTurn !== playerIndex) return;
+  
+  room.lastActivity = Date.now(); // Update activity
   
   const hand = room.hands[playerIndex];
   const tileIndex = hand.indexOf(tile);
@@ -398,46 +405,90 @@ wss.on('connection', (ws) => {
             break;
           }
           
-          if (room.players.length >= 4) {
+          // Check if room has expired (30 minutes)
+          const now = Date.now();
+          if (now - room.lastActivity > room.maxIdleTime) {
+            rooms.delete(room.code);
             ws.send(JSON.stringify({
               type: 'error',
-              message: 'Room is full'
+              message: 'Room has expired (30 minutes timeout)'
             }));
             break;
           }
           
-          if (room.state !== 'waiting') {
-            ws.send(JSON.stringify({
-              type: 'error',
-              message: 'Game already in progress'
-            }));
-            break;
+          // Check if this is a rejoin attempt
+          let playerIndex = -1;
+          let isRejoin = false;
+          
+          if (data.playerName && room.playerNames.includes(data.playerName)) {
+            // Player is rejoining
+            playerIndex = room.playerNames.indexOf(data.playerName);
+            isRejoin = true;
+            
+            // Remove old WebSocket connection if exists
+            room.players = room.players.filter(p => p.id !== clientId);
+          } else {
+            // New player joining
+            if (room.players.length >= 4) {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Room is full'
+              }));
+              break;
+            }
+            
+            if (room.state !== 'waiting' && !isRejoin) {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Game already in progress. Use same name to rejoin.'
+              }));
+              break;
+            }
+            
+            playerIndex = room.players.length;
           }
           
           const joiningPlayer = {
             id: clientId,
-            name: data.playerName || `Player ${room.players.length + 1}`,
+            name: data.playerName || `Player ${playerIndex + 1}`,
             ws
           };
           
-          room.players.push(joiningPlayer);
+          // Update player slot
+          room.players[playerIndex] = joiningPlayer;
+          room.playerNames[playerIndex] = joiningPlayer.name;
+          room.lastActivity = now;
+          
           currentRoom = room;
-          playerIndex = room.players.length - 1;
           
           ws.send(JSON.stringify({
             type: 'room-joined',
             roomCode: room.code,
-            playerIndex
+            playerIndex,
+            isRejoin,
+            gameState: room.state !== 'waiting' ? {
+              playerIndex,
+              hand: room.hands[playerIndex] || [],
+              melds: room.melds[playerIndex] || [],
+              discardPile: room.discardPile,
+              currentTurn: room.currentTurn,
+              lastDiscard: room.lastDiscard,
+              wallRemaining: room.wall.length,
+              players: room.players.map(p => ({ id: p.id, name: p.name })),
+              winner: room.winner
+            } : null
           }));
           
           broadcastToRoom(room, {
             type: 'player-joined',
-            playerCount: room.players.length,
-            players: room.players.map(p => ({ id: p.id, name: p.name }))
+            playerCount: room.players.filter(p => p).length,
+            players: room.players.map(p => p ? { id: p.id, name: p.name } : null),
+            isRejoin,
+            rejoiningPlayer: isRejoin ? joiningPlayer.name : null
           });
           
-          // Start game if 4 players
-          if (room.players.length === 4) {
+          // Start game if 4 players and in waiting state
+          if (room.players.filter(p => p).length === 4 && room.state === 'waiting') {
             setTimeout(() => startGame(room), 1000);
           }
           break;
@@ -496,10 +547,22 @@ wss.on('connection', (ws) => {
   });
 });
 
+// Clean up expired rooms every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [roomCode, room] of rooms.entries()) {
+    if (now - room.lastActivity > room.maxIdleTime) {
+      console.log(`🗑️ Cleaning up expired room: ${roomCode}`);
+      rooms.delete(roomCode);
+    }
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
+
 // Start the HTTP server
 server.listen(PORT, () => {
   console.log(`🀄 Filipino Mahjong server running on port ${PORT}`);
   console.log(`   HTTP: http://localhost:${PORT}`);
   console.log(`   WebSocket: ws://localhost:${PORT}`);
+  console.log(`   Room timeout: 30 minutes`);
 });
 

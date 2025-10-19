@@ -44,11 +44,22 @@ function App() {
         case 'room-joined':
           setRoomCode(data.roomCode);
           setPlayerIndex(data.playerIndex);
-          setMessage(`Joined room: ${data.roomCode}`);
+          setMessage(data.isRejoin 
+            ? `Rejoined room: ${data.roomCode}` 
+            : `Joined room: ${data.roomCode}`);
+          
+          // If rejoining mid-game, set the game state
+          if (data.gameState) {
+            setGameState(data.gameState);
+          }
           break;
           
         case 'player-joined':
-          setMessage(`${data.playerCount}/4 players in room`);
+          if (data.isRejoin && data.rejoiningPlayer) {
+            setMessage(`${data.rejoiningPlayer} rejoined the game`);
+          } else {
+            setMessage(`${data.playerCount}/4 players in room`);
+          }
           break;
           
         case 'game-started':

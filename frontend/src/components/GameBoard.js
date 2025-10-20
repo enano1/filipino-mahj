@@ -10,6 +10,15 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const [selectedTile, setSelectedTile] = useState(null);
   const [selectedChowOption, setSelectedChowOption] = useState(null);
 
+  // Safety checks for gameState properties
+  if (!gameState || !gameState.hand || !gameState.melds || !gameState.players) {
+    return (
+      <div className="game-board">
+        <div className="loading">Loading game state...</div>
+      </div>
+    );
+  }
+
   const isMyTurn = gameState.currentTurn === playerIndex;
   const canDraw = isMyTurn && gameState.hand.length === 13;
   const canDiscard = isMyTurn && gameState.hand.length === 14;
@@ -42,7 +51,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     .map(idx => ({
       position: ['top', 'right', 'left'][(idx - playerIndex + 4) % 4 - 1],
       playerIndex: idx,
-      melds: gameState.melds[idx],
+      melds: gameState.melds[idx] || [],
       isAI: gameState.players[idx]?.isAI || false,
       name: gameState.players[idx]?.name || `Player ${idx + 1}`
     }));
@@ -88,9 +97,9 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
       {/* Player's Hand and Melds */}
       <div className="player-area">
         <div className="player-melds">
-          <h3>Your Melds ({gameState.melds[playerIndex].length}/4)</h3>
+          <h3>Your Melds ({(gameState.melds[playerIndex] || []).length}/4)</h3>
           <div className="melds-container">
-            {gameState.melds[playerIndex].map((meld, idx) => (
+            {(gameState.melds[playerIndex] || []).map((meld, idx) => (
               <div key={idx} className={`meld meld-${meld.type}`}>
                 {meld.tiles.map((tile, tileIdx) => (
                   <Tile key={tileIdx} tile={tile} size="small" />
@@ -101,11 +110,29 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
           </div>
         </div>
 
+        {/* Detected Melds in Hand */}
+        {gameState.detectedMelds && gameState.detectedMelds.length > 0 && (
+          <div className="detected-melds">
+            <h4>🎯 Detected in Hand: {gameState.detectedMelds.length} meld(s)</h4>
+            <div className="detected-melds-container">
+              {gameState.detectedMelds.map((meld, idx) => (
+                <div key={idx} className={`detected-meld detected-meld-${meld.type}`}>
+                  {meld.tiles.map((tile, tileIdx) => (
+                    <Tile key={tileIdx} tile={tile} size="tiny" />
+                  ))}
+                  <span className="detected-meld-label">{meld.type}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <PlayerHand
           hand={gameState.hand}
           selectedTile={selectedTile}
           onTileClick={handleTileClick}
           canSelect={canDiscard}
+          drawnTile={gameState.drawnTile}
         />
 
         <ActionPanel

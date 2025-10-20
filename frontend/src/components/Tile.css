@@ -1,31 +1,32 @@
 .tile {
-  background: linear-gradient(145deg, #f5e6d3 0%, #d4b896 100%);
-  border: 2px solid #8b7355;
+  background: linear-gradient(145deg, #d4b896 0%, #b89968 100%);
+  border: 3px solid #6b5335;
   border-radius: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.2);
   transition: all 0.2s ease;
   user-select: none;
+  position: relative;
 }
 
 .tile-normal {
-  width: 50px;
-  height: 65px;
-  font-size: 2rem;
+  width: 75px;
+  height: 100px;
+  font-size: 3rem;
 }
 
 .tile-small {
-  width: 35px;
-  height: 45px;
-  font-size: 1.4rem;
+  width: 52px;
+  height: 70px;
+  font-size: 2rem;
 }
 
 .tile-tiny {
-  width: 25px;
-  height: 35px;
-  font-size: 1rem;
+  width: 38px;
+  height: 52px;
+  font-size: 1.4rem;
 }
 
 .tile-clickable {
@@ -34,23 +35,23 @@
 
 .tile-clickable:hover {
   transform: translateY(-5px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.3);
   border-color: #3b82f6;
-  background: linear-gradient(145deg, #fff4e6 0%, #e0c9a6 100%);
+  background: linear-gradient(145deg, #e0c9a6 0%, #c9a876 100%);
 }
 
 .tile-selected {
   transform: translateY(-10px);
   border-color: #10b981;
-  box-shadow: 0 8px 16px rgba(16, 185, 129, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.3);
-  background: linear-gradient(145deg, #fff4e6 0%, #e0c9a6 100%);
+  box-shadow: 0 8px 16px rgba(16, 185, 129, 0.7), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  background: linear-gradient(145deg, #e0c9a6 0%, #c9a876 100%);
 }
 
 .tile-highlighted {
   border-color: #fbbf24;
-  box-shadow: 0 0 15px rgba(251, 191, 36, 0.8);
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.9);
   animation: glow 1s ease-in-out infinite;
-  background: linear-gradient(145deg, #fffbf0 0%, #f0dab0 100%);
+  background: linear-gradient(145deg, #e8d4a8 0%, #d4b896 100%);
 }
 
 @keyframes glow {
@@ -63,7 +64,12 @@
 }
 
 .tile-emoji {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   line-height: 1;
+  text-align: center;
 }
 

@@ -142,7 +142,7 @@ function createRoom(roomCode) {
 // Broadcast message to all players in a room
 function broadcastToRoom(room, message) {
   room.players.forEach(player => {
-    if (player.ws.readyState === WebSocket.OPEN) {
+    if (player && player.ws && player.ws.readyState === WebSocket.OPEN) {
       player.ws.send(JSON.stringify(message));
     }
   });
@@ -150,7 +150,7 @@ function broadcastToRoom(room, message) {
 
 // Send private message to specific player
 function sendToPlayer(player, message) {
-  if (player.ws.readyState === WebSocket.OPEN) {
+  if (player && player.ws && player.ws.readyState === WebSocket.OPEN) {
     player.ws.send(JSON.stringify(message));
   }
 }
@@ -191,23 +191,69 @@ function startGame(room) {
   });
 }
 
+// Detect melds in a hand (without removing tiles)
+function detectMeldsInHand(hand) {
+  const detectedMelds = [];
+  const tileCounts = {};
+  
+  // Count tiles
+  hand.forEach(tile => {
+    tileCounts[tile] = (tileCounts[tile] || 0) + 1;
+  });
+  
+  // Detect pongs and kongs
+  Object.entries(tileCounts).forEach(([tile, count]) => {
+    if (count >= 4) {
+      detectedMelds.push({ type: 'kong', tiles: [tile, tile, tile, tile] });
+    } else if (count >= 3) {
+      detectedMelds.push({ type: 'pong', tiles: [tile, tile, tile] });
+    }
+  });
+  
+  // Detect chows (sequences)
+  const suits = ['bamboo', 'character', 'dot'];
+  suits.forEach(suit => {
+    const suitTiles = hand.filter(t => t.startsWith(suit)).sort();
+    const numbers = suitTiles.map(t => parseInt(t.split('-')[1]));
+    
+    for (let i = 0; i < numbers.length - 2; i++) {
+      if (numbers[i] + 1 === numbers[i + 1] && numbers[i] + 2 === numbers[i + 2]) {
+        detectedMelds.push({
+          type: 'chow',
+          tiles: [
+            `${suit}-${numbers[i]}`,
+            `${suit}-${numbers[i + 1]}`,
+            `${suit}-${numbers[i + 2]}`
+          ]
+        });
+      }
+    }
+  });
+  
+  return detectedMelds;
+}
+
 // Broadcast current game state to all players
 function broadcastGameState(room) {
   room.players.forEach((player, index) => {
     if (player && player.ws) {
+      const detectedMelds = detectMeldsInHand(room.hands[index]);
+      
       sendToPlayer(player, {
         type: 'game-state',
         state: {
           playerIndex: index,
           hand: room.hands[index],
           melds: room.melds,
+          detectedMelds: detectedMelds,
           discardPile: room.discardPile,
           currentTurn: room.currentTurn,
           lastDiscard: room.lastDiscard,
           wallRemaining: room.wall.length,
           players: room.players.map(p => p ? ({ id: p.id, name: p.name, isAI: p.isAI }) : null),
           winner: room.winner,
-          isTestRoom: room.isTestRoom
+          isTestRoom: room.isTestRoom,
+          drawnTile: room.drawnTiles ? room.drawnTiles[index] : null
         }
       });
     }
@@ -240,6 +286,7 @@ function handleDraw(room, playerIndex) {
   
   room.lastActivity = Date.now(); // Update activity
   const drawnTile = room.wall.shift();
+  let finalDrawnTile = drawnTile;
   
   // Check if it's an auto-redraw tile
   if (isAutoRedraw(drawnTile)) {
@@ -248,6 +295,7 @@ function handleDraw(room, playerIndex) {
       const newTile = room.wall.shift();
       room.hands[playerIndex].push(newTile);
       room.hands[playerIndex] = sortHand(room.hands[playerIndex]);
+      finalDrawnTile = newTile;
       
       broadcastToRoom(room, {
         type: 'auto-redraw',
@@ -260,7 +308,16 @@ function handleDraw(room, playerIndex) {
     room.hands[playerIndex] = sortHand(room.hands[playerIndex]);
   }
   
+  // Track the drawn tile for highlighting
+  if (!room.drawnTiles) {
+    room.drawnTiles = [null, null, null, null];
+  }
+  room.drawnTiles[playerIndex] = finalDrawnTile;
+  
+  // Clear last discard after drawing (new turn cycle)
   room.lastDiscard = null;
+  room.pendingActions = [];
+  
   broadcastGameState(room);
 }
 
@@ -279,6 +336,11 @@ function handleDiscard(room, playerIndex, tile) {
   // Remove tile from hand
   hand.splice(tileIndex, 1);
   room.hands[playerIndex] = sortHand(hand);
+  
+  // Clear the drawn tile highlight after discard
+  if (room.drawnTiles) {
+    room.drawnTiles[playerIndex] = null;
+  }
   
   // Add to discard pile
   room.discardPile.push(tile);
@@ -415,7 +477,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         message: `Player ${playerIndex + 1} wins!`
       });
     } else {
-      // Set turn to claiming player (they must discard)
+      // Set turn to claiming player (they must discard now)
       room.currentTurn = playerIndex;
     }
     
@@ -527,8 +589,8 @@ wss.on('connection', (ws) => {
               gameState: testRoom.state !== 'waiting' ? {
                 playerIndex: 0,
                 hand: testRoom.hands[0] || [],
-                melds: testRoom.melds[0] || [],
-                discardPile: testRoom.discardPile,
+                melds: testRoom.melds || [[], [], [], []],
+                discardPile: testRoom.discardPile || [],
                 currentTurn: testRoom.currentTurn,
                 lastDiscard: testRoom.lastDiscard,
                 wallRemaining: testRoom.wall.length,
@@ -544,7 +606,7 @@ wss.on('connection', (ws) => {
               isTestRoom: true
             });
             
-            // Start game immediately in test room
+            // Start game immediately in test room (always 4 players)
             if (testRoom.state === 'waiting') {
               setTimeout(() => startGame(testRoom), 1000);
             }
@@ -552,6 +614,7 @@ wss.on('connection', (ws) => {
             break;
           }
           
+          // Regular room joining logic
           const room = rooms.get(data.roomCode);
           
           if (!room) {
@@ -574,12 +637,12 @@ wss.on('connection', (ws) => {
           }
           
           // Check if this is a rejoin attempt
-          let playerIndex = -1;
+          let rejoinPlayerIndex = -1;
           let isRejoin = false;
           
           if (data.playerName && room.playerNames.includes(data.playerName)) {
             // Player is rejoining
-            playerIndex = room.playerNames.indexOf(data.playerName);
+            rejoinPlayerIndex = room.playerNames.indexOf(data.playerName);
             isRejoin = true;
             
             // Remove old WebSocket connection if exists
@@ -602,32 +665,33 @@ wss.on('connection', (ws) => {
               break;
             }
             
-            playerIndex = room.players.length;
+            rejoinPlayerIndex = room.players.length;
           }
           
           const joiningPlayer = {
             id: clientId,
-            name: data.playerName || `Player ${playerIndex + 1}`,
+            name: data.playerName || `Player ${rejoinPlayerIndex + 1}`,
             ws
           };
           
           // Update player slot
-          room.players[playerIndex] = joiningPlayer;
-          room.playerNames[playerIndex] = joiningPlayer.name;
+          room.players[rejoinPlayerIndex] = joiningPlayer;
+          room.playerNames[rejoinPlayerIndex] = joiningPlayer.name;
           room.lastActivity = now;
           
           currentRoom = room;
+          playerIndex = rejoinPlayerIndex; // Set the outer playerIndex
           
           ws.send(JSON.stringify({
             type: 'room-joined',
             roomCode: room.code,
-            playerIndex,
+            playerIndex: rejoinPlayerIndex,
             isRejoin,
             gameState: room.state !== 'waiting' ? {
-              playerIndex,
-              hand: room.hands[playerIndex] || [],
-              melds: room.melds[playerIndex] || [],
-              discardPile: room.discardPile,
+              playerIndex: rejoinPlayerIndex,
+              hand: room.hands[rejoinPlayerIndex] || [],
+              melds: room.melds || [[], [], [], []],
+              discardPile: room.discardPile || [],
               currentTurn: room.currentTurn,
               lastDiscard: room.lastDiscard,
               wallRemaining: room.wall.length,

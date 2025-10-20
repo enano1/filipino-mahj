@@ -1,9 +1,10 @@
 .game-board {
   width: 100%;
-  max-width: 1400px;
+  max-width: 1800px;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  padding: 1rem;
 }
 
 .turn-indicator {
@@ -41,8 +42,8 @@
   position: relative;
   background: rgba(0, 0, 0, 0.2);
   border-radius: 1rem;
-  padding: 2rem;
-  min-height: 400px;
+  padding: 3rem;
+  min-height: 500px;
   display: flex;
   align-items: center;
   justify-content: center;

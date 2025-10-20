@@ -2,7 +2,8 @@
   background: rgba(0, 0, 0, 0.3);
   padding: 1.5rem;
   border-radius: 0.5rem;
-  min-width: 400px;
+  min-width: 500px;
+  max-width: 600px;
 }
 
 .discard-pile h3 {
@@ -18,7 +19,28 @@
   gap: 0.5rem;
   justify-content: center;
   min-height: 100px;
-  align-items: center;
+  max-height: 300px;
+  overflow-y: auto;
+  align-items: flex-start;
+  padding: 0.5rem;
+}
+
+.discard-tiles::-webkit-scrollbar {
+  width: 8px;
+}
+
+.discard-tiles::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.discard-tiles::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.discard-tiles::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .empty-message {

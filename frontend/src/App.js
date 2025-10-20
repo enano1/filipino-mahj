@@ -75,19 +75,42 @@ function App() {
           
         case 'game-state':
           setGameState(data.state);
+          
+          // Clear action availability if lastDiscard is null (tile was claimed or turn advanced)
+          if (!data.state.lastDiscard) {
+            setActionAvailable(null);
+          }
           break;
           
         case 'action-available':
           setActionAvailable({
             type: data.action,
             tile: data.tile,
-            options: data.options
+            options: data.options,
+            discardTimestamp: Date.now() // Track when this action became available
           });
           break;
           
         case 'auto-redraw':
-          setMessage(data.message);
+          setMessage(`🔄 ${data.message}`);
           setTimeout(() => setMessage(''), 3000);
+          break;
+          
+        case 'action-expired':
+          setActionAvailable(null);
+          setMessage('⏰ Claim opportunity expired!');
+          setTimeout(() => setMessage(''), 2000);
+          break;
+          
+        case 'claim-success':
+          setMessage(`✅ ${data.message}`);
+          setTimeout(() => setMessage(''), 3000);
+          break;
+          
+        case 'claim-window-expired':
+          setActionAvailable(null);
+          setMessage('⏱️ No claims - turn advancing');
+          setTimeout(() => setMessage(''), 2000);
           break;
           
         case 'game-won':

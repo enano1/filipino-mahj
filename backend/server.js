@@ -61,24 +61,9 @@ class AIPlayer {
       if (hand.length === 14) {
         const randomTile = hand[Math.floor(Math.random() * hand.length)];
         
-        // Remove tile from hand
-        const tileIndex = hand.indexOf(randomTile);
-        hand.splice(tileIndex, 1);
-        this.room.hands[this.playerIndex] = sortHand(hand);
+        // Use handleDiscard to ensure proper turn management
+        handleDiscard(this.room, this.playerIndex, randomTile);
         
-        // Add to discard pile
-        this.room.discardPile.push(randomTile);
-        this.room.lastDiscard = {
-          tile: randomTile,
-          playerIndex: this.playerIndex,
-          timestamp: Date.now()
-        };
-
-        // Move to next turn
-        this.room.currentTurn = (this.room.currentTurn + 1) % 4;
-        this.room.lastActivity = Date.now();
-
-        broadcastGameState(this.room);
         broadcastToRoom(this.room, {
           type: 'ai-move',
           message: `${this.name} discarded ${randomTile}`
@@ -285,28 +270,26 @@ function handleDraw(room, playerIndex) {
   }
   
   room.lastActivity = Date.now(); // Update activity
-  const drawnTile = room.wall.shift();
+  let drawnTile = room.wall.shift();
   let finalDrawnTile = drawnTile;
+  let redrawCount = 0;
   
-  // Check if it's an auto-redraw tile
-  if (isAutoRedraw(drawnTile)) {
-    // Automatically redraw
-    if (room.wall.length > 0) {
-      const newTile = room.wall.shift();
-      room.hands[playerIndex].push(newTile);
-      room.hands[playerIndex] = sortHand(room.hands[playerIndex]);
-      finalDrawnTile = newTile;
-      
-      broadcastToRoom(room, {
-        type: 'auto-redraw',
-        playerIndex,
-        message: `Player ${playerIndex + 1} drew an auto-redraw tile and drew again.`
-      });
-    }
-  } else {
-    room.hands[playerIndex].push(drawnTile);
-    room.hands[playerIndex] = sortHand(room.hands[playerIndex]);
+  // Keep redrawing if it's an auto-redraw tile (honors/flowers)
+  while (isAutoRedraw(drawnTile) && room.wall.length > 0) {
+    redrawCount++;
+    drawnTile = room.wall.shift();
+    finalDrawnTile = drawnTile;
+    
+    broadcastToRoom(room, {
+      type: 'auto-redraw',
+      playerIndex,
+      message: `Player ${playerIndex + 1} drew an auto-redraw tile (${redrawCount === 1 ? 'dragon/wind/flower' : 'again'}) and drew another.`
+    });
   }
+  
+  // Add the final tile to hand
+  room.hands[playerIndex].push(finalDrawnTile);
+  room.hands[playerIndex] = sortHand(room.hands[playerIndex]);
   
   // Track the drawn tile for highlighting
   if (!room.drawnTiles) {
@@ -315,6 +298,16 @@ function handleDraw(room, playerIndex) {
   room.drawnTiles[playerIndex] = finalDrawnTile;
   
   // Clear last discard after drawing (new turn cycle)
+  // If there were pending actions, they're now expired
+  if (room.pendingActions && room.pendingActions.length > 0) {
+    room.pendingActions.forEach(action => {
+      sendToPlayer(room.players[action.playerIndex], {
+        type: 'action-expired',
+        message: 'Claim opportunity expired'
+      });
+    });
+  }
+  
   room.lastDiscard = null;
   room.pendingActions = [];
   
@@ -350,6 +343,9 @@ function handleDiscard(room, playerIndex, tile) {
     timestamp: Date.now()
   };
   
+  // Set claim window - 5 seconds for claims
+  room.claimWindowEnd = Date.now() + 5000;
+  
   // Check if other players can pong, kong, or chow
   room.pendingActions = [];
   
@@ -376,8 +372,29 @@ function handleDiscard(room, playerIndex, tile) {
   }
   
   if (room.pendingActions.length === 0) {
-    // No claims, move to next turn
+    // No claims possible, move to next turn immediately
     room.currentTurn = (room.currentTurn + 1) % 4;
+  } else {
+    // Set 5-second timer for claim window
+    if (room.claimTimer) {
+      clearTimeout(room.claimTimer);
+    }
+    
+    room.claimTimer = setTimeout(() => {
+      // If no one has claimed after 5 seconds, advance turn
+      if (room.pendingActions.length > 0 && room.lastDiscard) {
+        room.pendingActions = [];
+        room.lastDiscard = null;
+        room.currentTurn = (playerIndex + 1) % 4;
+        
+        broadcastToRoom(room, {
+          type: 'claim-window-expired',
+          message: 'No one claimed - moving to next turn'
+        });
+        
+        broadcastGameState(room);
+      }
+    }, 5000);
   }
   
   broadcastGameState(room);
@@ -385,12 +402,23 @@ function handleDiscard(room, playerIndex, tile) {
   // Notify about pending actions
   if (room.pendingActions.length > 0) {
     room.pendingActions.forEach(action => {
-      sendToPlayer(room.players[action.playerIndex], {
+      const player = room.players[action.playerIndex];
+      
+      // Send to human players
+      sendToPlayer(player, {
         type: 'action-available',
         action: action.type,
         tile,
         options: action.options
       });
+      
+      // Trigger AI response if it's an AI player
+      if (player && player.isAI && room.aiPlayers) {
+        const aiPlayer = room.aiPlayers.find(ai => ai.playerIndex === action.playerIndex);
+        if (aiPlayer) {
+          aiPlayer.respondToClaim(action.type, tile);
+        }
+      }
     });
   }
 }
@@ -399,6 +427,16 @@ function handleDiscard(room, playerIndex, tile) {
 function handleClaim(room, playerIndex, claimType, tiles) {
   if (room.state !== 'playing') return;
   if (!room.lastDiscard) return;
+  
+  // Check if this player has a pending action for this claim
+  const hasPendingAction = room.pendingActions.some(
+    action => action.playerIndex === playerIndex && action.type === claimType
+  );
+  
+  if (!hasPendingAction) {
+    console.log(`Player ${playerIndex} tried to claim ${claimType} but has no pending action`);
+    return;
+  }
   
   const discardedTile = room.lastDiscard.tile;
   const hand = room.hands[playerIndex];
@@ -454,6 +492,12 @@ function handleClaim(room, playerIndex, claimType, tiles) {
   }
   
   if (valid) {
+    // Clear claim timer
+    if (room.claimTimer) {
+      clearTimeout(room.claimTimer);
+      room.claimTimer = null;
+    }
+    
     // Add meld
     room.melds[playerIndex].push({
       type: claimType,
@@ -477,8 +521,16 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         message: `Player ${playerIndex + 1} wins!`
       });
     } else {
-      // Set turn to claiming player (they must discard now)
+      // Set turn to claiming player (they need to draw then discard)
       room.currentTurn = playerIndex;
+      
+      // Notify the claiming player
+      broadcastToRoom(room, {
+        type: 'claim-success',
+        playerIndex,
+        claimType,
+        message: `Player ${playerIndex + 1} claimed ${claimType}! Now draw a tile.`
+      });
     }
     
     broadcastGameState(room);
@@ -494,7 +546,14 @@ function handlePass(room, playerIndex) {
   
   // If no more pending actions, move to next turn
   if (room.pendingActions.length === 0 && room.lastDiscard) {
+    // Clear claim timer
+    if (room.claimTimer) {
+      clearTimeout(room.claimTimer);
+      room.claimTimer = null;
+    }
+    
     room.currentTurn = (room.lastDiscard.playerIndex + 1) % 4;
+    room.lastDiscard = null;
     broadcastGameState(room);
   }
 }

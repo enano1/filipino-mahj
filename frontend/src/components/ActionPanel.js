@@ -17,28 +17,34 @@ function ActionPanel({
   const hasKong = actionAvailable && actionAvailable.type === 'kong';
   const hasChow = actionAvailable && actionAvailable.type === 'chow';
   const hasAnyClaim = hasPong || hasKong || hasChow;
+  
+  // Auto-select chow option if there's only one
+  React.useEffect(() => {
+    if (hasChow && actionAvailable.options && actionAvailable.options.length === 1 && !selectedChowOption) {
+      onSelectChowOption(actionAvailable.options[0]);
+    }
+  }, [hasChow, actionAvailable, selectedChowOption, onSelectChowOption]);
 
   return (
     <div className="action-panel">
       <div className="action-section">
         <h4>Your Actions</h4>
         
-        {/* Chow selector dropdown (appears above buttons when needed) */}
-        {hasChow && actionAvailable.options && (
-          <div className="chow-selector">
-            <label>Select Chow:</label>
-            <select 
-              value={selectedChowOption ? JSON.stringify(selectedChowOption) : ''}
-              onChange={(e) => onSelectChowOption(e.target.value ? JSON.parse(e.target.value) : null)}
-              className="chow-dropdown"
-            >
-              <option value="">-- Select combination --</option>
+        {/* Chow selector - inline with buttons when needed */}
+        {hasChow && actionAvailable.options && actionAvailable.options.length > 1 && (
+          <div className="chow-selector-inline">
+            <label>Chow Options:</label>
+            <div className="chow-options">
               {actionAvailable.options.map((option, idx) => (
-                <option key={idx} value={JSON.stringify(option)}>
+                <button
+                  key={idx}
+                  className={`chow-option-btn ${selectedChowOption && JSON.stringify(selectedChowOption) === JSON.stringify(option) ? 'selected' : ''}`}
+                  onClick={() => onSelectChowOption(option)}
+                >
                   {option.join(' ')}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
         )}
         

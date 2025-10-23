@@ -104,6 +104,7 @@ function App() {
           
         case 'claim-success':
           setMessage(`✅ ${data.message}`);
+          setActionAvailable(null); // Clear any pending actions
           setTimeout(() => setMessage(''), 3000);
           break;
           
@@ -119,6 +120,11 @@ function App() {
           
         case 'game-over':
           setMessage(data.message);
+          break;
+          
+        case 'game-reset':
+          setMessage(data.message);
+          setTimeout(() => setMessage(''), 3000);
           break;
           
         case 'player-left':
@@ -196,6 +202,13 @@ function App() {
     setActionAvailable(null);
   };
 
+  const resetTestRoom = () => {
+    if (roomCode === '9999') {
+      sendMessage({ type: 'reset-test-room' });
+    }
+  };
+
+
   // Show debug page if ?debug is in URL
   if (window.location.search.includes('debug')) {
     return <EnvDebug />;
@@ -213,12 +226,6 @@ function App() {
         </div>
       </header>
       
-      {message && (
-        <div className="message-banner">
-          {message}
-        </div>
-      )}
-      
       <main className="App-main">
         {!roomCode ? (
           <Lobby 
@@ -235,6 +242,9 @@ function App() {
             onClaim={claimTile}
             onPass={passClaim}
             actionAvailable={actionAvailable}
+            isTestRoom={roomCode === '9999'}
+            onResetTestRoom={resetTestRoom}
+            message={message}
           />
         ) : (
           <div className="waiting-room">

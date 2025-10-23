@@ -343,8 +343,8 @@ function handleDiscard(room, playerIndex, tile) {
     timestamp: Date.now()
   };
   
-  // Set claim window - 5 seconds for claims
-  room.claimWindowEnd = Date.now() + 5000;
+  // Set claim window - 10 seconds for claims
+  room.claimWindowEnd = Date.now() + 10000;
   
   // Check if other players can pong, kong, or chow
   room.pendingActions = [];
@@ -360,7 +360,8 @@ function handleDiscard(room, playerIndex, tile) {
     }
   });
   
-  // Check for chow from next player only
+  // Check for chow from next player only (the one who's about to draw)
+  // In turn order: if player X discards, only player X+1 can chow
   const nextPlayer = (playerIndex + 1) % 4;
   const chowOptions = canChow(room.hands[nextPlayer], tile);
   if (chowOptions.length > 0) {
@@ -381,7 +382,7 @@ function handleDiscard(room, playerIndex, tile) {
     }
     
     room.claimTimer = setTimeout(() => {
-      // If no one has claimed after 5 seconds, advance turn
+      // If no one has claimed after 10 seconds, advance turn
       if (room.pendingActions.length > 0 && room.lastDiscard) {
         room.pendingActions = [];
         room.lastDiscard = null;
@@ -394,7 +395,7 @@ function handleDiscard(room, playerIndex, tile) {
         
         broadcastGameState(room);
       }
-    }, 5000);
+    }, 10000);
   }
   
   broadcastGameState(room);
@@ -443,7 +444,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
   
   // Validate claim
   let valid = false;
-  const meldTiles = [discardedTile];
+  const meldTiles = [discardedTile]; // Start with the discarded tile
   
   if (claimType === 'pong') {
     if (canPong(hand, discardedTile)) {
@@ -452,7 +453,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         const idx = hand.indexOf(discardedTile);
         if (idx !== -1) {
           hand.splice(idx, 1);
-          meldTiles.push(discardedTile);
+          meldTiles.push(discardedTile); // Add each removed tile to meld
         }
       }
       valid = meldTiles.length === 3 && isPong(meldTiles);
@@ -464,7 +465,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         const idx = hand.indexOf(discardedTile);
         if (idx !== -1) {
           hand.splice(idx, 1);
-          meldTiles.push(discardedTile);
+          meldTiles.push(discardedTile); // Add each removed tile to meld
         }
       }
       valid = meldTiles.length === 4 && isKong(meldTiles);
@@ -487,6 +488,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         valid = isChow(tiles);
         meldTiles.length = 0;
         meldTiles.push(...tiles);
+        console.log(`Chow: Removed 2 tiles from hand, added 1 discarded tile. Hand now has ${hand.length} tiles`);
       }
     }
   }
@@ -504,12 +506,39 @@ function handleClaim(room, playerIndex, claimType, tiles) {
       tiles: meldTiles
     });
     
+    // After claiming, handle tile count correctly
+    // Pong: add 1 discarded, remove 3 from hand = 11 tiles (no drawing)
+    // Chow: add 1 discarded, remove 3 from hand = 11 tiles (no drawing)  
+    // Kong: add 1 discarded, remove 4 from hand = 10 tiles, draw 1 = 11 tiles
+    console.log(`After ${claimType}: Player ${playerIndex} has ${hand.length} tiles before drawing`);
+    
+    if (claimType === 'kong') {
+      // Kong: draw 1 tile
+      let drawnTile = room.wall.shift();
+      
+      // Auto-redraw if it's an honor/flower tile
+      while (isAutoRedraw(drawnTile) && room.wall.length > 0) {
+        console.log(`Auto-redrawing ${drawnTile} after kong`);
+        drawnTile = room.wall.shift();
+      }
+      
+      hand.push(drawnTile);
+      console.log(`After kong draw: Player ${playerIndex} has ${hand.length} tiles`);
+    }
+    // Pong and Chow: no drawing needed
+    
+    console.log(`Final tile count after ${claimType}: Player ${playerIndex} has ${hand.length} tiles`);
     room.hands[playerIndex] = sortHand(hand);
     
     // Remove from discard pile
     room.discardPile.pop();
     room.lastDiscard = null;
     room.pendingActions = [];
+    
+    // Clear drawn tile highlight after claiming
+    if (room.drawnTiles) {
+      room.drawnTiles[playerIndex] = null;
+    }
     
     // Check for win
     if (checkWin(room.hands[playerIndex], room.melds[playerIndex])) {
@@ -521,7 +550,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         message: `Player ${playerIndex + 1} wins!`
       });
     } else {
-      // Set turn to claiming player (they need to draw then discard)
+      // Set turn to claiming player (they must discard now with 14 tiles)
       room.currentTurn = playerIndex;
       
       // Notify the claiming player
@@ -529,7 +558,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         type: 'claim-success',
         playerIndex,
         claimType,
-        message: `Player ${playerIndex + 1} claimed ${claimType}! Now draw a tile.`
+        message: `Player ${playerIndex + 1} claimed ${claimType}! Select a tile to discard.`
       });
     }
     
@@ -794,6 +823,79 @@ wss.on('connection', (ws) => {
         case 'pass':
           if (currentRoom) {
             handlePass(currentRoom, playerIndex);
+          }
+          break;
+          
+        case 'reset-test-room':
+          // Only allow reset for test room 9999
+          if (currentRoom && currentRoom.code === '9999' && currentRoom.isTestRoom) {
+            console.log('🔄 Resetting test room 9999');
+            
+            // Reset players array - keep human player at index 0, recreate AI players
+            const humanPlayer = currentRoom.players[0];
+            currentRoom.players = [humanPlayer, null, null, null];
+            currentRoom.playerNames = [humanPlayer.name, '', '', ''];
+            
+            // Recreate AI players
+            currentRoom.aiPlayers = [];
+            for (let i = 1; i < 4; i++) {
+              const aiPlayer = new AIPlayer(i, currentRoom);
+              currentRoom.aiPlayers.push(aiPlayer);
+              currentRoom.players[i] = {
+                id: `ai-${i}`,
+                name: aiPlayer.name,
+                ws: null,
+                isAI: true
+              };
+              currentRoom.playerNames[i] = aiPlayer.name;
+            }
+            
+            // Reset room state
+            const wall = generateTileWall();
+            const { hands, remainingWall } = dealHands(wall);
+            
+            currentRoom.wall = remainingWall;
+            currentRoom.hands = hands;
+            currentRoom.melds = [[], [], [], []];
+            currentRoom.discardPile = [];
+            currentRoom.currentTurn = 0;
+            currentRoom.lastDiscard = null;
+            currentRoom.pendingActions = [];
+            currentRoom.drawnTiles = [null, null, null, null];
+            currentRoom.winner = null;
+            currentRoom.state = 'playing';
+            currentRoom.lastActivity = Date.now();
+            
+            // Clear claim timer
+            if (currentRoom.claimTimer) {
+              clearTimeout(currentRoom.claimTimer);
+              currentRoom.claimTimer = null;
+            }
+            
+            // Handle auto-redraws for initial hands
+            currentRoom.hands.forEach((hand, idx) => {
+              let hasAutoRedraw = true;
+              while (hasAutoRedraw && currentRoom.wall.length > 0) {
+                hasAutoRedraw = false;
+                for (let i = hand.length - 1; i >= 0; i--) {
+                  if (isAutoRedraw(hand[i])) {
+                    hand.splice(i, 1);
+                    hand.push(currentRoom.wall.shift());
+                    hasAutoRedraw = true;
+                  }
+                }
+              }
+              currentRoom.hands[idx] = sortHand(hand);
+            });
+            
+            broadcastToRoom(currentRoom, {
+              type: 'game-reset',
+              message: '🔄 Test room reset! New game starting...'
+            });
+            
+            broadcastGameState(currentRoom);
+            
+            console.log('✅ Test room reset complete - 1 human + 3 AI players');
           }
           break;
           

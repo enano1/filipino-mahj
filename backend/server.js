@@ -936,25 +936,29 @@ wss.on('connection', (ws) => {
           break;
           
         case 'draw':
-          if (currentRoom) {
+          if (currentRoom && playerIndex !== -1) {
+            console.log(`🂡 Player ${playerIndex + 1} (${currentRoom.code}) requested to DRAW`);
             handleDraw(currentRoom, playerIndex);
           }
           break;
           
         case 'discard':
-          if (currentRoom) {
+          if (currentRoom && playerIndex !== -1 && data.tile) {
+            console.log(`🂧 Player ${playerIndex + 1} (${currentRoom.code}) discarded request for ${data.tile}`);
             handleDiscard(currentRoom, playerIndex, data.tile);
           }
           break;
           
         case 'claim':
-          if (currentRoom) {
+          if (currentRoom && playerIndex !== -1 && data.claimType) {
+            console.log(`🂩 Player ${playerIndex + 1} (${currentRoom.code}) attempting claim ${data.claimType}${data.tiles ? ' with ' + JSON.stringify(data.tiles) : ''}`);
             handleClaim(currentRoom, playerIndex, data.claimType, data.tiles);
           }
           break;
           
         case 'pass':
-          if (currentRoom) {
+          if (currentRoom && playerIndex !== -1) {
+            console.log(`🀄 Player ${playerIndex + 1} (${currentRoom.code}) chose to PASS on claims`);
             handlePass(currentRoom, playerIndex);
           }
           break;

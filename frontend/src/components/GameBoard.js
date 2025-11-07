@@ -9,6 +9,7 @@ import ActionPanel from './ActionPanel';
 function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, actionAvailable, isTestRoom, onResetTestRoom, message }) {
   const [selectedTile, setSelectedTile] = useState(null);
   const [selectedChowOption, setSelectedChowOption] = useState(null);
+  const [recentlyDiscarded, setRecentlyDiscarded] = useState(false);
 
   const hasState =
     gameState &&
@@ -22,18 +23,19 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const safeCurrentTurn = hasState ? gameState.currentTurn : 0;
   const safeLastDiscard = hasState ? gameState.lastDiscard : null;
 
-  const isMyTurn = hasState && safeCurrentTurn === playerIndex;
+  const serverSaysMyTurn = hasState && safeCurrentTurn === playerIndex;
   const meldTileCount = (safeMelds[playerIndex] || []).reduce(
     (sum, meld) => sum + (meld?.tiles?.length || 0),
     0
   );
   const totalTilesHeld = safeHand.length + meldTileCount;
-  const canDraw = isMyTurn && totalTilesHeld === 13 && !safeLastDiscard;
-  const canDiscard = isMyTurn && totalTilesHeld === 14;
+  const effectiveMyTurn = serverSaysMyTurn && !recentlyDiscarded;
+  const canDraw = effectiveMyTurn && totalTilesHeld === 13 && !safeLastDiscard;
+  const canDiscard = serverSaysMyTurn && totalTilesHeld === 14;
   
   // Debug logging
   console.log(
-    `GameBoard Debug: hasState=${hasState}, isMyTurn=${isMyTurn}, hand.length=${safeHand.length}, meldTileCount=${meldTileCount}, totalTiles=${totalTilesHeld}, canDraw=${canDraw}, canDiscard=${canDiscard}, lastDiscard=${safeLastDiscard ? safeLastDiscard.tile : 'none'}, currentTurn=${safeCurrentTurn}, playerIndex=${playerIndex}`
+    `GameBoard Debug: hasState=${hasState}, serverTurn=${serverSaysMyTurn}, effectiveMyTurn=${effectiveMyTurn}, hand.length=${safeHand.length}, meldTileCount=${meldTileCount}, totalTiles=${totalTilesHeld}, canDraw=${canDraw}, canDiscard=${canDiscard}, lastDiscard=${safeLastDiscard ? safeLastDiscard.tile : 'none'}, currentTurn=${safeCurrentTurn}, playerIndex=${playerIndex}`
   );
 
   useEffect(() => {
@@ -41,6 +43,18 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
       setSelectedTile(null);
     }
   }, [canDiscard, selectedTile]);
+
+  useEffect(() => {
+    if (!recentlyDiscarded) {
+      return;
+    }
+
+    if (!serverSaysMyTurn) {
+      setRecentlyDiscarded(false);
+    } else if (safeLastDiscard && safeLastDiscard.playerIndex !== playerIndex) {
+      setRecentlyDiscarded(false);
+    }
+  }, [recentlyDiscarded, serverSaysMyTurn, safeLastDiscard, playerIndex]);
 
   if (!hasState) {
     return (
@@ -60,6 +74,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     if (selectedTile) {
       onDiscard(selectedTile);
       setSelectedTile(null);
+      setRecentlyDiscarded(true);
     }
   };
 
@@ -112,7 +127,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
       {/* Turn Indicator */}
       <div className="turn-indicator">
         <div className="turn-info">
-          {isMyTurn ? (
+          {effectiveMyTurn ? (
             <span className="your-turn">🎯 Your Turn</span>
           ) : (
             <span className="waiting">

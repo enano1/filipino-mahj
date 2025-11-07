@@ -18,6 +18,30 @@ const {
 
 const PORT = process.env.PORT || 3001;
 
+function summarizePlayer(room, playerIndex) {
+  const hand = room.hands[playerIndex] || [];
+  const melds = room.melds[playerIndex] || [];
+  const meldTileCount = melds.reduce(
+    (sum, meld) => sum + (meld?.tiles?.length || 0),
+    0
+  );
+  return {
+    hand,
+    melds,
+    handCount: hand.length,
+    meldTileCount,
+    totalTiles: hand.length + meldTileCount
+  };
+}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
 // Create HTTP server
 const server = http.createServer((req, res) => {
   // Handle HTTP requests
@@ -261,12 +285,28 @@ function handleDraw(room, playerIndex) {
   if (room.state !== 'playing') return;
   if (room.currentTurn !== playerIndex) return;
   if (room.wall.length === 0) {
+    if (room.discardPile.length === 0) {
+      broadcastToRoom(room, {
+        type: 'game-over',
+        message: 'Game ended - no more tiles available!'
+      });
+      room.state = 'finished';
+      return;
+    }
+
+    const reshuffledTiles = shuffleArray([...room.discardPile]);
+    room.discardPile = [];
+    room.wall = reshuffledTiles;
+    room.lastDiscard = null;
+
+    console.log(
+      `[RESHUFFLE] Wall empty - reshuffled ${reshuffledTiles.length} tiles from discard pile back into the wall`
+    );
+
     broadcastToRoom(room, {
-      type: 'game-over',
-      message: 'Game ended - no more tiles in wall!'
+      type: 'wall-reshuffled',
+      message: `Wall was empty - reshuffled ${reshuffledTiles.length} tiles from discards`
     });
-    room.state = 'finished';
-    return;
   }
   
   room.lastActivity = Date.now(); // Update activity
@@ -291,6 +331,16 @@ function handleDraw(room, playerIndex) {
   room.hands[playerIndex].push(finalDrawnTile);
   room.hands[playerIndex] = sortHand(room.hands[playerIndex]);
   
+  const drawSummary = summarizePlayer(room, playerIndex);
+  const meldSummaryString = drawSummary.melds.length > 0
+    ? drawSummary.melds.map(m => `${m.type}:${m.tiles.join(' ')}`).join(' | ')
+    : 'none';
+  console.log(
+    `[DRAW] P${playerIndex + 1} drew ${finalDrawnTile} | hand=${drawSummary.handCount} meldTiles=${drawSummary.meldTileCount} total=${drawSummary.totalTiles}`
+  );
+  console.log(`[DRAW]    Hand: ${drawSummary.hand.join(', ') || 'empty'}`);
+  console.log(`[DRAW]    Melds: ${meldSummaryString}`);
+
   // Track the drawn tile for highlighting
   if (!room.drawnTiles) {
     room.drawnTiles = [null, null, null, null];
@@ -343,6 +393,20 @@ function handleDiscard(room, playerIndex, tile) {
     timestamp: Date.now()
   };
   
+  const discardSummary = summarizePlayer(room, playerIndex);
+  const discardMeldSummary = discardSummary.melds.length > 0
+    ? discardSummary.melds.map(m => `${m.type}:${m.tiles.join(' ')}`).join(' | ')
+    : 'none';
+  console.log(
+    `[DISCARD] P${playerIndex + 1} discarded ${tile} | hand=${discardSummary.handCount} meldTiles=${discardSummary.meldTileCount} total=${discardSummary.totalTiles}`
+  );
+  console.log(`[DISCARD]    Hand: ${discardSummary.hand.join(', ') || 'empty'}`);
+  console.log(`[DISCARD]    Melds: ${discardMeldSummary}`);
+
+  // Determine next player in turn order
+  const nextPlayer = (playerIndex + 1) % 4;
+  room.currentTurn = nextPlayer;
+
   // Set claim window - 10 seconds for claims
   room.claimWindowEnd = Date.now() + 10000;
   
@@ -362,7 +426,6 @@ function handleDiscard(room, playerIndex, tile) {
   
   // Check for chow from next player only (the one who's about to draw)
   // In turn order: if player X discards, only player X+1 can chow
-  const nextPlayer = (playerIndex + 1) % 4;
   const chowOptions = canChow(room.hands[nextPlayer], tile);
   if (chowOptions.length > 0) {
     room.pendingActions.push({ 
@@ -373,8 +436,7 @@ function handleDiscard(room, playerIndex, tile) {
   }
   
   if (room.pendingActions.length === 0) {
-    // No claims possible, move to next turn immediately
-    room.currentTurn = (room.currentTurn + 1) % 4;
+    // No claims possible, keep move with next player immediately
   } else {
     // Set 5-second timer for claim window
     if (room.claimTimer) {
@@ -446,6 +508,8 @@ function handleClaim(room, playerIndex, claimType, tiles) {
   let valid = false;
   const meldTiles = [discardedTile]; // Start with the discarded tile
   
+  let lastDrawnDuringClaim = null;
+
   if (claimType === 'pong') {
     if (canPong(hand, discardedTile)) {
       // Remove 2 tiles from hand
@@ -506,29 +570,83 @@ function handleClaim(room, playerIndex, claimType, tiles) {
       tiles: meldTiles
     });
     
-    // After claiming, handle tile count correctly
-    // Pong: add 1 discarded, remove 3 from hand = 11 tiles (no drawing)
-    // Chow: add 1 discarded, remove 3 from hand = 11 tiles (no drawing)  
-    // Kong: add 1 discarded, remove 4 from hand = 10 tiles, draw 1 = 11 tiles
-    console.log(`After ${claimType}: Player ${playerIndex} has ${hand.length} tiles before drawing`);
-    
     if (claimType === 'kong') {
       // Kong: draw 1 tile
-      let drawnTile = room.wall.shift();
-      
-      // Auto-redraw if it's an honor/flower tile
-      while (isAutoRedraw(drawnTile) && room.wall.length > 0) {
-        console.log(`Auto-redrawing ${drawnTile} after kong`);
-        drawnTile = room.wall.shift();
+      if (room.wall.length === 0 && room.discardPile.length > 0) {
+        const reshuffledTiles = shuffleArray([...room.discardPile]);
+        room.discardPile = [];
+        room.wall = reshuffledTiles;
+        room.lastDiscard = null;
+        console.log(
+          `[RESHUFFLE] Wall empty - reshuffled ${reshuffledTiles.length} tiles from discard pile back into the wall (kong replacement)`
+        );
+        broadcastToRoom(room, {
+          type: 'wall-reshuffled',
+          message: `Wall was empty - reshuffled ${reshuffledTiles.length} tiles from discards`
+        });
       }
-      
-      hand.push(drawnTile);
-      console.log(`After kong draw: Player ${playerIndex} has ${hand.length} tiles`);
+
+      if (room.wall.length > 0) {
+        let drawnTile = room.wall.shift();
+        
+        // Auto-redraw if it's an honor/flower tile
+        while (isAutoRedraw(drawnTile) && room.wall.length > 0) {
+          drawnTile = room.wall.shift();
+        }
+        
+        hand.push(drawnTile);
+        console.log(`[CLAIM] P${playerIndex + 1} drew replacement tile ${drawnTile} for kong`);
+        lastDrawnDuringClaim = drawnTile;
+      }
     }
-    // Pong and Chow: no drawing needed
-    
-    console.log(`Final tile count after ${claimType}: Player ${playerIndex} has ${hand.length} tiles`);
     room.hands[playerIndex] = sortHand(hand);
+
+    let claimSummary = summarizePlayer(room, playerIndex);
+
+    while (claimSummary.totalTiles < 14) {
+      if (room.wall.length === 0) {
+        if (room.discardPile.length === 0) {
+          console.log(`[CLAIM_TOPUP] P${playerIndex + 1} cannot draw additional tiles - wall and discard pile are empty.`);
+          break;
+        }
+        const reshuffledTiles = shuffleArray([...room.discardPile]);
+        room.discardPile = [];
+        room.wall = reshuffledTiles;
+        room.lastDiscard = null;
+        console.log(
+          `[RESHUFFLE] Wall empty - reshuffled ${reshuffledTiles.length} tiles from discard pile back into the wall (claim top-up)`
+        );
+        broadcastToRoom(room, {
+          type: 'wall-reshuffled',
+          message: `Wall was empty - reshuffled ${reshuffledTiles.length} tiles from discards`
+        });
+      }
+
+      if (room.wall.length === 0) {
+        break;
+      }
+
+      let topUpTile = room.wall.shift();
+      while (isAutoRedraw(topUpTile) && room.wall.length > 0) {
+        topUpTile = room.wall.shift();
+      }
+      hand.push(topUpTile);
+      room.hands[playerIndex] = sortHand(hand);
+      lastDrawnDuringClaim = topUpTile;
+      claimSummary = summarizePlayer(room, playerIndex);
+      console.log(
+        `[CLAIM_TOPUP] P${playerIndex + 1} drew ${topUpTile} to reach ${claimSummary.totalTiles} total tiles`
+      );
+    }
+
+    const claimMeldSummary = claimSummary.melds.length > 0
+      ? claimSummary.melds.map(m => `${m.type}:${m.tiles.join(' ')}`).join(' | ')
+      : 'none';
+    console.log(
+      `[CLAIM] P${playerIndex + 1} completed ${claimType} with ${meldTiles.join(', ')} | hand=${claimSummary.handCount} meldTiles=${claimSummary.meldTileCount} total=${claimSummary.totalTiles}`
+    );
+    console.log(`[CLAIM]    Hand: ${claimSummary.hand.join(', ') || 'empty'}`);
+    console.log(`[CLAIM]    Melds: ${claimMeldSummary}`);
     
     // Remove from discard pile
     room.discardPile.pop();
@@ -536,12 +654,17 @@ function handleClaim(room, playerIndex, claimType, tiles) {
     room.pendingActions = [];
     
     // Clear drawn tile highlight after claiming
-    if (room.drawnTiles) {
-      room.drawnTiles[playerIndex] = null;
+    if (!room.drawnTiles) {
+      room.drawnTiles = [null, null, null, null];
     }
+    room.drawnTiles[playerIndex] = lastDrawnDuringClaim;
     
     // Check for win
-    if (checkWin(room.hands[playerIndex], room.melds[playerIndex])) {
+    const didWin = checkWin(room.hands[playerIndex], room.melds[playerIndex]);
+    console.log(
+      `[CHECK_WIN] P${playerIndex + 1} -> result=${didWin} | pair=${room.hands[playerIndex].join(', ') || 'none'} | melds=${room.melds[playerIndex].map(m => `${m.type}:${m.tiles.join(' ')}`).join(' | ') || 'none'}`
+    );
+    if (didWin) {
       room.winner = playerIndex;
       room.state = 'finished';
       broadcastToRoom(room, {
@@ -563,6 +686,16 @@ function handleClaim(room, playerIndex, claimType, tiles) {
     }
     
     broadcastGameState(room);
+  } else {
+    console.log(
+      `[CLAIM_FAIL] P${playerIndex + 1} attempted ${claimType} but the tiles were invalid.`
+    );
+    handlePass(room, playerIndex);
+    sendToPlayer(room.players[playerIndex], {
+      type: 'claim-invalid',
+      claimType,
+      message: `Unable to ${claimType} - required tiles not in hand.`
+    });
   }
 }
 
@@ -929,22 +1062,37 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Clean up expired rooms every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [roomCode, room] of rooms.entries()) {
-    if (now - room.lastActivity > room.maxIdleTime) {
-      console.log(`🗑️ Cleaning up expired room: ${roomCode}`);
-      rooms.delete(roomCode);
+let cleanupInterval = null;
+if (require.main === module) {
+  cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [roomCode, room] of rooms.entries()) {
+      if (now - room.lastActivity > room.maxIdleTime) {
+        console.log(`🗑️ Cleaning up expired room: ${roomCode}`);
+        rooms.delete(roomCode);
+      }
     }
-  }
-}, 5 * 60 * 1000); // Check every 5 minutes
+  }, 5 * 60 * 1000); // Check every 5 minutes
 
-// Start the HTTP server
-server.listen(PORT, () => {
-  console.log(`🀄 Filipino Mahjong server running on port ${PORT}`);
-  console.log(`   HTTP: http://localhost:${PORT}`);
-  console.log(`   WebSocket: ws://localhost:${PORT}`);
-  console.log(`   Room timeout: 30 minutes`);
-});
+  // Start the HTTP server
+  server.listen(PORT, () => {
+    console.log(`🀄 Filipino Mahjong server running on port ${PORT}`);
+    console.log(`   HTTP: http://localhost:${PORT}`);
+    console.log(`   WebSocket: ws://localhost:${PORT}`);
+    console.log(`   Room timeout: 30 minutes`);
+  });
+}
 
+module.exports = {
+  server,
+  wss,
+  rooms,
+  createRoom,
+  startGame,
+  handleDraw,
+  handleDiscard,
+  handleClaim,
+  summarizePlayer,
+  detectMeldsInHand,
+  cleanupInterval
+};

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './GameBoard.css';
 import Tile from './Tile';
 import PlayerHand from './PlayerHand';
@@ -10,21 +10,45 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const [selectedTile, setSelectedTile] = useState(null);
   const [selectedChowOption, setSelectedChowOption] = useState(null);
 
-  // Safety checks for gameState properties
-  if (!gameState || !gameState.hand || !gameState.melds || !gameState.players) {
+  const hasState =
+    gameState &&
+    Array.isArray(gameState.hand) &&
+    Array.isArray(gameState.melds) &&
+    Array.isArray(gameState.players);
+
+  const safeHand = hasState ? gameState.hand : [];
+  const safeMelds = hasState ? gameState.melds : [[], [], [], []];
+  const safePlayers = hasState ? gameState.players : [];
+  const safeCurrentTurn = hasState ? gameState.currentTurn : 0;
+  const safeLastDiscard = hasState ? gameState.lastDiscard : null;
+
+  const isMyTurn = hasState && safeCurrentTurn === playerIndex;
+  const meldTileCount = (safeMelds[playerIndex] || []).reduce(
+    (sum, meld) => sum + (meld?.tiles?.length || 0),
+    0
+  );
+  const totalTilesHeld = safeHand.length + meldTileCount;
+  const canDraw = isMyTurn && totalTilesHeld === 13 && !safeLastDiscard;
+  const canDiscard = isMyTurn && totalTilesHeld === 14;
+  
+  // Debug logging
+  console.log(
+    `GameBoard Debug: hasState=${hasState}, isMyTurn=${isMyTurn}, hand.length=${safeHand.length}, meldTileCount=${meldTileCount}, totalTiles=${totalTilesHeld}, canDraw=${canDraw}, canDiscard=${canDiscard}, lastDiscard=${safeLastDiscard ? safeLastDiscard.tile : 'none'}, currentTurn=${safeCurrentTurn}, playerIndex=${playerIndex}`
+  );
+
+  useEffect(() => {
+    if (!canDiscard && selectedTile !== null) {
+      setSelectedTile(null);
+    }
+  }, [canDiscard, selectedTile]);
+
+  if (!hasState) {
     return (
       <div className="game-board">
         <div className="loading">Loading game state...</div>
       </div>
     );
   }
-
-  const isMyTurn = gameState.currentTurn === playerIndex;
-  const canDraw = isMyTurn && gameState.hand.length === 13;
-  const canDiscard = isMyTurn && (gameState.hand.length === 14 || gameState.hand.length === 11);
-  
-  // Debug logging
-  console.log(`GameBoard Debug: isMyTurn=${isMyTurn}, hand.length=${gameState.hand.length}, canDiscard=${canDiscard}, currentTurn=${gameState.currentTurn}, playerIndex=${playerIndex}`);
 
   const handleTileClick = (tile) => {
     if (canDiscard) {
@@ -77,9 +101,9 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     return {
       position: getPosition(idx),
       playerIndex: idx,
-      melds: gameState.melds[idx] || [],
-      isAI: gameState.players[idx]?.isAI || false,
-      name: gameState.players[idx]?.name || `Player ${idx + 1}`
+      melds: safeMelds[idx] || [],
+      isAI: safePlayers[idx]?.isAI || false,
+      name: safePlayers[idx]?.name || `Player ${idx + 1}`
     };
   });
 

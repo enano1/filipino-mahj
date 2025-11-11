@@ -1,4 +1,4 @@
-# 🀄 Filipino Mahjong - Online Multiplayer Game
+# 🀄 Filipino Mahjong - Online Multiplayer Game - Paul
 
 A real-time multiplayer Filipino Mahjong game built with React (frontend) and Node.js with WebSockets (backend).
 

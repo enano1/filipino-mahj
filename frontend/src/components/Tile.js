@@ -13,8 +13,46 @@ const TILE_EMOJIS = {
   'flower-1': '🀢', 'flower-2': '🀣', 'flower-3': '🀤', 'flower-4': '🀥'
 };
 
+const getTileLabel = (tile) => {
+  if (!tile) return '';
+  const [type, value] = tile.split('-');
+
+  const numericValue = Number(value);
+  if (!Number.isNaN(numericValue)) {
+    if (type === 'character') {
+      return `${numericValue}`;
+    }
+    if (type === 'bamboo') {
+      return `${numericValue}`;
+    }
+    if (type === 'dot') {
+      return `${numericValue}`;
+    }
+  }
+
+  switch (tile) {
+    case 'dragon-red':
+      return 'DR';
+    case 'dragon-green':
+      return 'DG';
+    case 'dragon-white':
+      return 'DW';
+    case 'wind-east':
+      return 'E';
+    case 'wind-south':
+      return 'S';
+    case 'wind-west':
+      return 'W';
+    case 'wind-north':
+      return 'N';
+    default:
+      return '';
+  }
+};
+
 function Tile({ tile, size = 'normal', selected = false, highlighted = false, onClick }) {
   const emoji = TILE_EMOJIS[tile] || '🀫';
+  const label = getTileLabel(tile);
   
   return (
     <div
@@ -22,6 +60,7 @@ function Tile({ tile, size = 'normal', selected = false, highlighted = false, on
       onClick={onClick}
       title={tile}
     >
+      {label && <span className={`tile-label tile-label-${size}`}>{label}</span>}
       <span className="tile-emoji">{emoji}</span>
     </div>
   );

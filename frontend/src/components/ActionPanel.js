@@ -1,5 +1,6 @@
 import React from 'react';
 import './ActionPanel.css';
+import Tile from './Tile';
 
 function ActionPanel({
   drawEnabled,
@@ -41,7 +42,11 @@ function ActionPanel({
                   className={`chow-option-btn ${selectedChowOption && JSON.stringify(selectedChowOption) === JSON.stringify(option) ? 'selected' : ''}`}
                   onClick={() => onSelectChowOption(option)}
                 >
-                  {option.join(' ')}
+                  <div className="chow-option-tiles">
+                    {option.map((tile, tileIdx) => (
+                      <Tile key={tileIdx} tile={tile} size="tiny" />
+                    ))}
+                  </div>
                 </button>
               ))}
             </div>

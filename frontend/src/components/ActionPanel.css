@@ -40,6 +40,18 @@
   flex-wrap: wrap;
 }
 
+.chow-option-tiles {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.chow-option-tiles .tile {
+  border-width: 2px;
+  width: 44px;
+  height: 60px;
+}
+
 .chow-option-btn {
   padding: 0.5rem 0.75rem;
   background: rgba(0, 0, 0, 0.3);

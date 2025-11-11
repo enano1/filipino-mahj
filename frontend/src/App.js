@@ -18,6 +18,7 @@ function App() {
   const [gameState, setGameState] = useState(null);
   const [message, setMessage] = useState('');
   const [actionAvailable, setActionAvailable] = useState(null);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
   
   const wsRef = useRef(null);
 
@@ -230,14 +231,27 @@ function App() {
 
   return (
     <div className="App">
-      <header className="App-header">
-        <h1>🀄 Filipino Mahjong</h1>
-        <div className="status-bar">
-          <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
-            {connected ? '🟢 Connected' : '🔴 Disconnected'}
-          </span>
-          {roomCode && <span className="room-code">Room: {roomCode}</span>}
-        </div>
+      <header className={`App-header ${headerCollapsed ? 'collapsed' : ''}`}>
+        <button
+          className="header-toggle"
+          onClick={() => setHeaderCollapsed(prev => !prev)}
+          aria-expanded={!headerCollapsed}
+          aria-label={headerCollapsed ? 'Expand header' : 'Collapse header'}
+        >
+          {headerCollapsed ? '▼' : '▲'}
+        </button>
+
+        {!headerCollapsed && (
+          <>
+            <h1>🀄 Filipino Mahjong</h1>
+            <div className="status-bar">
+              <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
+                {connected ? '🟢 Connected' : '🔴 Disconnected'}
+              </span>
+              {roomCode && <span className="room-code">Room: {roomCode}</span>}
+            </div>
+          </>
+        )}
       </header>
       
       <main className="App-main">

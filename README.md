@@ -16,7 +16,6 @@ A real-time multiplayer Filipino Mahjong game built with React (frontend) and No
 - **Turn-based gameplay** with visual indicators
 - **Win detection** and game state management
 - Optional **Firebase authentication & player stats** (Google sign-in + Firestore wins/losses tracking)
-- **Profile dashboard & leaderboard** (view your stats and the top performers when Firebase is enabled)
 
 ## Installation
 
@@ -51,15 +50,6 @@ A real-time multiplayer Filipino Mahjong game built with React (frontend) and No
      - Backend (`backend/.env`): `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
      - Frontend (`frontend/.env`): `REACT_APP_FIREBASE_*` variables from your Firebase web app config
    - Deploy targets such as Railway/Vercel should be updated with the same values.
-   - Add your local/dev/prod domains to Firebase Auth's **Authorized domains** list so Google sign-in works everywhere.
-
-### Player Profiles & Leaderboard (optional)
-
-Once Firebase is configured:
-
-- The lobby sidebar shows a profile widget for the signed-in player with total games, wins/losses, win rate, and their latest result.
-- A live leaderboard highlights the top 10 players by wins (non-zero games) and updates automatically as matches finish.
-- Data is pulled from the `players` collection written by the backend after each completed game—no manual setup required beyond enabling Firestore.
 
 ## Running the Game
 

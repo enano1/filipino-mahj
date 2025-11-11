@@ -1,7 +1,6 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported as isAnalyticsSupported } from 'firebase/analytics';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -22,13 +21,11 @@ const hasFirebaseConfig =
 let app = null;
 let auth = null;
 let googleProvider = null;
-let db = null;
 
 if (hasFirebaseConfig) {
   app = getApps().length ? getApp() : initializeApp(firebaseConfig);
   auth = getAuth(app);
   googleProvider = new GoogleAuthProvider();
-  db = getFirestore(app);
 
   // Attempt to enable Analytics only when supported (and in browser)
   if (typeof window !== 'undefined') {
@@ -46,5 +43,5 @@ if (hasFirebaseConfig) {
   console.warn('[Firebase] Web config environment variables missing. Firebase features disabled on client.');
 }
 
-export { app, auth, googleProvider, hasFirebaseConfig, db };
+export { app, auth, googleProvider, hasFirebaseConfig };
 

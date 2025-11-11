@@ -144,25 +144,33 @@ function summarizePlayer(room, playerIndex) {
     (sum, meld) => sum + (meld?.tiles?.length || 0),
     0
   );
+  const kongCount = melds.reduce(
+    (sum, meld) => sum + (meld?.type === 'kong' ? 1 : 0),
+    0
+  );
+  const totalTiles = hand.length + meldTileCount;
+  const turnTileCount = totalTiles - kongCount;
   return {
     hand,
     melds,
     handCount: hand.length,
     meldTileCount,
-    totalTiles: hand.length + meldTileCount
+    kongCount,
+    totalTiles,
+    turnTileCount
   };
 }
 
 function playerCanDraw(room, playerIndex) {
   if (room.currentTurn !== playerIndex) return false;
   const summary = summarizePlayer(room, playerIndex);
-  return summary.totalTiles === 13 && !room.lastDiscard;
+  return summary.turnTileCount === 13 && !room.lastDiscard;
 }
 
 function playerCanDiscard(room, playerIndex) {
   if (room.currentTurn !== playerIndex) return false;
   const summary = summarizePlayer(room, playerIndex);
-  return summary.totalTiles === 14;
+  return summary.turnTileCount >= 14;
 }
 
 function shouldEnableForceDraw(room, playerIndex) {
@@ -749,7 +757,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
 
     let claimSummary = summarizePlayer(room, playerIndex);
 
-    while (claimSummary.totalTiles < 14) {
+    while (claimSummary.turnTileCount < 14) {
       if (room.wall.length === 0) {
         if (room.discardPile.length === 0) {
           console.log(`[CLAIM_TOPUP] P${playerIndex + 1} cannot draw additional tiles - wall and discard pile are empty.`);

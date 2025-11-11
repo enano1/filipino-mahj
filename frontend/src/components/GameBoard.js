@@ -30,16 +30,21 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     (sum, meld) => sum + (meld?.tiles?.length || 0),
     0
   );
+  const kongCount = (safeMelds[playerIndex] || []).reduce(
+    (sum, meld) => sum + (meld?.type === 'kong' ? 1 : 0),
+    0
+  );
   const totalTilesHeld = safeHand.length + meldTileCount;
+  const effectiveTurnTiles = totalTilesHeld - kongCount;
   const effectiveMyTurn = serverSaysMyTurn && !recentlyDiscarded;
-  const canDraw = effectiveMyTurn && totalTilesHeld === 13 && !safeLastDiscard;
-  const canDiscard = serverSaysMyTurn && totalTilesHeld === 14;
+  const canDraw = effectiveMyTurn && effectiveTurnTiles === 13 && !safeLastDiscard;
+  const canDiscard = serverSaysMyTurn && effectiveTurnTiles >= 14;
   const canForceDraw = serverSaysMyTurn && !canDraw && !canDiscard;
   const drawButtonEnabled = (canDraw || canForceDraw) && !drawLocked;
   
   // Debug logging
   console.log(
-    `GameBoard Debug: hasState=${hasState}, serverTurn=${serverSaysMyTurn}, effectiveMyTurn=${effectiveMyTurn}, hand.length=${safeHand.length}, meldTileCount=${meldTileCount}, totalTiles=${totalTilesHeld}, canDraw=${canDraw}, canDiscard=${canDiscard}, lastDiscard=${safeLastDiscard ? safeLastDiscard.tile : 'none'}, currentTurn=${safeCurrentTurn}, playerIndex=${playerIndex}`
+    `GameBoard Debug: hasState=${hasState}, serverTurn=${serverSaysMyTurn}, effectiveMyTurn=${effectiveMyTurn}, hand.length=${safeHand.length}, meldTileCount=${meldTileCount}, kongCount=${kongCount}, totalTiles=${totalTilesHeld}, effectiveTurnTiles=${effectiveTurnTiles}, canDraw=${canDraw}, canDiscard=${canDiscard}, lastDiscard=${safeLastDiscard ? safeLastDiscard.tile : 'none'}, currentTurn=${safeCurrentTurn}, playerIndex=${playerIndex}`
   );
 
   useEffect(() => {

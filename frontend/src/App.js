@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { onIdTokenChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import './App.css';
 import Lobby from './components/Lobby';
 import GameBoard from './components/GameBoard';
-import ProfileWidget from './components/ProfileWidget';
-import Leaderboard from './components/Leaderboard';
 import EnvDebug from './EnvDebug';
-import { auth, googleProvider, hasFirebaseConfig, db } from './firebase';
+import { auth, googleProvider, hasFirebaseConfig } from './firebase';
 
 // WebSocket URL - must be set in environment variables for production
 const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:3001';
@@ -29,16 +26,9 @@ function App() {
   const [authError, setAuthError] = useState(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [playerStats, setPlayerStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(hasFirebaseConfig);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(hasFirebaseConfig);
-  const [headerProfileOpen, setHeaderProfileOpen] = useState(false);
-  const [headerLeaderboardOpen, setHeaderLeaderboardOpen] = useState(false);
   
   const wsRef = useRef(null);
   const authTokenRef = useRef(null);
-  const headerProfileRef = useRef(null);
 
   useEffect(() => {
     if (!hasFirebaseConfig || !auth) {
@@ -277,137 +267,6 @@ function App() {
     };
   }, [connectWebSocket]);
 
-  useEffect(() => {
-    if (!headerProfileOpen) {
-      return;
-    }
-
-    const handleClickOutside = (event) => {
-      if (
-        headerProfileRef.current &&
-        !headerProfileRef.current.contains(event.target)
-      ) {
-        setHeaderProfileOpen(false);
-      }
-    };
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setHeaderProfileOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [headerProfileOpen]);
-
-  useEffect(() => {
-    if (!headerLeaderboardOpen) {
-      return;
-    }
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setHeaderLeaderboardOpen(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [headerLeaderboardOpen]);
-
-  useEffect(() => {
-    if (!currentUser) {
-      setHeaderProfileOpen(false);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!hasFirebaseConfig || !db) {
-      setPlayerStats(null);
-      setStatsLoading(false);
-      return;
-    }
-
-    if (!currentUser) {
-      setPlayerStats(null);
-      setStatsLoading(false);
-      return;
-    }
-
-    setStatsLoading(true);
-    const playerDocRef = doc(db, 'players', currentUser.uid);
-    const unsubscribe = onSnapshot(
-      playerDocRef,
-      (snapshot) => {
-        setPlayerStats(snapshot.exists() ? snapshot.data() : null);
-        setStatsLoading(false);
-      },
-      (error) => {
-        console.error('[Firestore] Failed to fetch player stats', error);
-        setStatsLoading(false);
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!hasFirebaseConfig || !db) {
-      setLeaderboard([]);
-      setLeaderboardLoading(false);
-      return;
-    }
-
-    setLeaderboardLoading(true);
-    const leaderboardQuery = query(
-      collection(db, 'players'),
-      orderBy('wins', 'desc'),
-      limit(10)
-    );
-
-    const unsubscribe = onSnapshot(
-      leaderboardQuery,
-      (snapshot) => {
-        const entries = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() || {};
-          const wins = data.wins || 0;
-          const totalGames = data.totalGames || 0;
-          const winRate = totalGames > 0
-            ? `${Math.round((wins / totalGames) * 100)}%`
-            : '0%';
-
-          return {
-            id: docSnap.id,
-            displayName: data.displayName || data.email || 'Player',
-            email: data.email || null,
-            wins,
-            totalGames,
-            winRate
-          };
-        }).filter((entry) => entry.totalGames > 0 || entry.wins > 0);
-
-        setLeaderboard(entries);
-        setLeaderboardLoading(false);
-      },
-      (error) => {
-        console.error('[Firestore] Failed to fetch leaderboard', error);
-        setLeaderboard([]);
-        setLeaderboardLoading(false);
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
   const sendMessage = (data) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
@@ -493,86 +352,44 @@ function App() {
               </span>
               {roomCode && <span className="room-code">Room: {roomCode}</span>}
               {hasFirebaseConfig && (
-                <>
-                  <button
-                    type="button"
-                    className="header-leaderboard-btn"
-                    onClick={() => setHeaderLeaderboardOpen(true)}
-                    disabled={leaderboardLoading}
-                    title="View leaderboard"
-                  >
-                    🏆 Leaderboard
-                  </button>
-                  <div
-                    className="auth-status"
-                    ref={headerProfileRef}
-                  >
-                    {!authReady && (
-                      <span className="auth-status-message">Loading account...</span>
-                    )}
-
-                    {authReady && currentUser && (
-                      <>
-                        <button
-                          type="button"
-                          className="auth-button profile"
-                          onClick={() => setHeaderProfileOpen((prev) => !prev)}
-                          aria-haspopup="true"
-                          aria-expanded={headerProfileOpen}
-                          title="View your stats"
-                        >
-                          {currentUser.photoURL ? (
-                            <img
-                              className="auth-avatar"
-                              src={currentUser.photoURL}
-                              alt={currentUser.displayName || currentUser.email || 'Player avatar'}
-                            />
-                          ) : (
-                            <span className="auth-initial">
-                              {(currentUser.displayName || currentUser.email || 'P')
-                                .charAt(0)
-                                .toUpperCase()}
-                            </span>
-                          )}
-                          <span className="auth-name">
-                            {currentUser.displayName || currentUser.email || 'Signed in'}
-                          </span>
-                          <span className="auth-caret">▾</span>
-                        </button>
-
-                        {headerProfileOpen && (
-                          <div
-                            className="header-profile-popover"
-                            role="dialog"
-                            aria-label="Your stats"
-                          >
-                            <ProfileWidget
-                              user={currentUser}
-                              stats={playerStats}
-                              loading={statsLoading}
-                              onSignOut={handleSignOut}
-                              signingOut={isSigningOut}
-                            />
-                          </div>
+                <div className="auth-status">
+                  {!authReady && <span className="auth-status-message">Loading account...</span>}
+                  {authReady && currentUser && (
+                    <>
+                      <div className="auth-user">
+                        {currentUser.photoURL && (
+                          <img
+                            className="auth-avatar"
+                            src={currentUser.photoURL}
+                            alt={currentUser.displayName || currentUser.email || 'Player avatar'}
+                          />
                         )}
-                      </>
-                    )}
-
-                    {authReady && !currentUser && (
+                        <span className="auth-name">
+                          {currentUser.displayName || currentUser.email || 'Signed in'}
+                        </span>
+                      </div>
                       <button
-                        className="auth-button primary"
-                        onClick={handleSignIn}
-                        disabled={isSigningIn}
+                        className="auth-button"
+                        onClick={handleSignOut}
+                        disabled={isSigningOut}
                       >
-                        {isSigningIn ? 'Signing in…' : 'Sign in'}
+                        {isSigningOut ? 'Signing out…' : 'Sign out'}
                       </button>
-                    )}
-
-                    {authReady && authError && (
-                      <span className="auth-status-message error">{authError}</span>
-                    )}
-                  </div>
-                </>
+                    </>
+                  )}
+                  {authReady && !currentUser && (
+                    <button
+                      className="auth-button primary"
+                      onClick={handleSignIn}
+                      disabled={isSigningIn}
+                    >
+                      {isSigningIn ? 'Signing in…' : 'Sign in'}
+                    </button>
+                  )}
+                  {authReady && authError && (
+                    <span className="auth-status-message error">{authError}</span>
+                  )}
+                </div>
               )}
             </div>
           </>
@@ -591,12 +408,7 @@ function App() {
             onSignOut={handleSignOut}
             signingIn={isSigningIn}
             signingOut={isSigningOut}
-          authError={authError}
-          playerStats={playerStats}
-          statsLoading={statsLoading}
-          leaderboard={leaderboard}
-          leaderboardLoading={leaderboardLoading}
-          firebaseEnabled={hasFirebaseConfig}
+            authError={authError}
           />
         ) : gameState ? (
           <GameBoard
@@ -611,12 +423,6 @@ function App() {
             isTestRoom={roomCode === '9999'}
             onResetTestRoom={resetTestRoom}
             message={message}
-            user={currentUser}
-            playerStats={playerStats}
-            statsLoading={statsLoading}
-            leaderboard={leaderboard}
-            leaderboardLoading={leaderboardLoading}
-            firebaseEnabled={hasFirebaseConfig}
           />
         ) : (
           <div className="waiting-room">
@@ -626,31 +432,6 @@ function App() {
           </div>
         )}
       </main>
-      
-      {headerLeaderboardOpen && (
-        <div
-          className="leaderboard-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Leaderboard"
-          onClick={() => setHeaderLeaderboardOpen(false)}
-        >
-          <div
-            className="leaderboard-dialog"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="leaderboard-dialog__close"
-              onClick={() => setHeaderLeaderboardOpen(false)}
-              aria-label="Close leaderboard"
-            >
-              ✕
-            </button>
-            <Leaderboard entries={leaderboard} loading={leaderboardLoading} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,0 +1,117 @@
+.leaderboard-card {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  color: #e2e8f0;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.leaderboard-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.leaderboard-card__header h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  color: #f8fafc;
+}
+
+.leaderboard-card__header span {
+  font-size: 0.9rem;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.leaderboard-card__loading,
+.leaderboard-card__empty {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.95rem;
+  color: rgba(226, 232, 240, 0.8);
+}
+
+.leaderboard-card__empty {
+  justify-content: center;
+  text-align: center;
+}
+
+.leaderboard-card__spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: rgba(16, 185, 129, 0.9);
+  border-radius: 50%;
+  animation: leaderboard-spin 0.9s linear infinite;
+}
+
+@keyframes leaderboard-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.leaderboard-card__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.leaderboard-card__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.leaderboard-card__rank {
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.leaderboard-card__player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.leaderboard-card__name {
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.leaderboard-card__meta {
+  font-size: 0.85rem;
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.leaderboard-card__stat {
+  text-align: right;
+}
+
+.leaderboard-card__stat-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(226, 232, 240, 0.6);
+}
+
+.leaderboard-card__stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #bbf7d0;
+}
+

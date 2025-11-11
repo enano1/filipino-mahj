@@ -74,9 +74,11 @@
   padding: 0.25rem 0.75rem;
   border-radius: 0.5rem;
   font-weight: bold;
+  align-content: center;
 }
 
 .auth-status {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -132,6 +134,69 @@
 .auth-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.auth-button.profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.auth-button.profile:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.auth-initial {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.3);
+  color: #bfdbfe;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.auth-caret {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.header-leaderboard-btn {
+  background: rgba(248, 250, 252, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  color: #fde68a;
+  font-weight: 600;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease, border 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.header-leaderboard-btn:hover:not(:disabled) {
+  background: rgba(251, 191, 36, 0.25);
+  transform: translateY(-1px);
+}
+
+.header-leaderboard-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.header-profile-popover {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  width: min(320px, 80vw);
+  z-index: 1100;
+  animation: fadeIn 0.2s ease-out;
 }
 
 .auth-status-message {

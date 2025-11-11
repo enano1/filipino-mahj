@@ -1,29 +1,113 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Lobby.css';
 
-function Lobby({ onCreateRoom, onJoinRoom, connected }) {
+function Lobby({
+  onCreateRoom,
+  onJoinRoom,
+  connected,
+  user,
+  authReady,
+  onSignIn,
+  onSignOut,
+  signingIn,
+  signingOut,
+  authError
+}) {
   const [playerName, setPlayerName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [mode, setMode] = useState(null); // 'create' or 'join'
 
-  const handleCreateRoom = (e) => {
+  useEffect(() => {
+    if (user?.displayName && !playerName) {
+      setPlayerName(user.displayName);
+    }
+  }, [user, playerName]);
+
+  const handleCreateRoom = async (e) => {
     e.preventDefault();
+    if (!user) {
+      onSignIn?.();
+      return;
+    }
+
     if (playerName.trim()) {
-      onCreateRoom(playerName.trim());
+      await onCreateRoom(playerName.trim());
     }
   };
 
-  const handleJoinRoom = (e) => {
+  const handleJoinRoom = async (e) => {
     e.preventDefault();
+    if (!user) {
+      onSignIn?.();
+      return;
+    }
+
     if (playerName.trim() && joinCode.trim()) {
-      onJoinRoom(joinCode.trim().toUpperCase(), playerName.trim());
+      await onJoinRoom(joinCode.trim().toUpperCase(), playerName.trim());
     }
   };
+
+  const renderAuthSection = () => (
+    <div className="auth-card">
+      <h2>Account</h2>
+      {!authReady && <p className="auth-status-text">Loading authentication…</p>}
+
+      {authReady && !user && (
+        <>
+          <p className="auth-status-text">
+            Sign in to create rooms, invite friends, and track your wins.
+          </p>
+          <button
+            className="auth-primary-button"
+            onClick={onSignIn}
+            disabled={signingIn}
+          >
+            {signingIn ? 'Signing in…' : 'Continue with Google'}
+          </button>
+          {authError && <p className="auth-error">{authError}</p>}
+        </>
+      )}
+
+      {authReady && user && (
+        <div className="auth-user-info">
+          {user.photoURL && (
+            <img
+              className="auth-user-avatar"
+              src={user.photoURL}
+              alt={user.displayName || user.email || 'Player avatar'}
+            />
+          )}
+          <div>
+            <p className="auth-user-name">{user.displayName || user.email}</p>
+            <button
+              className="auth-secondary-button"
+              onClick={onSignOut}
+              disabled={signingOut}
+            >
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (!authReady) {
+    return (
+      <div className="lobby">
+        <div className="lobby-card">
+          <p className="auth-status-text">Loading authentication…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!mode) {
     return (
       <div className="lobby">
         <div className="lobby-card">
+          {renderAuthSection()}
+
           <h2>Welcome to Filipino Mahjong!</h2>
           <p className="subtitle">Choose an option to get started</p>
           
@@ -31,14 +115,14 @@ function Lobby({ onCreateRoom, onJoinRoom, connected }) {
             <button 
               className="primary-button"
               onClick={() => setMode('create')}
-              disabled={!connected}
+              disabled={!connected || !user}
             >
               🎮 Create Room
             </button>
             <button 
               className="secondary-button"
               onClick={() => setMode('join')}
-              disabled={!connected}
+              disabled={!connected || !user}
             >
               🚪 Join Room
             </button>
@@ -46,6 +130,22 @@ function Lobby({ onCreateRoom, onJoinRoom, connected }) {
           
           {!connected && (
             <p className="warning">Connecting to server...</p>
+          )}
+
+          {user && (
+            <p className="helper-text">
+              Signed in as <strong>{user.displayName || user.email}</strong>
+            </p>
+          )}
+
+          {!user && (
+            <p className="helper-text warning">
+              Sign in above to enable multiplayer features.
+            </p>
+          )}
+          
+          {authError && (
+            <p className="auth-error">{authError}</p>
           )}
         </div>
       </div>
@@ -60,6 +160,8 @@ function Lobby({ onCreateRoom, onJoinRoom, connected }) {
             ← Back
           </button>
           
+          {renderAuthSection()}
+
           <h2>Create a Room</h2>
           <p className="subtitle">Start a new game and invite friends</p>
           
@@ -77,7 +179,7 @@ function Lobby({ onCreateRoom, onJoinRoom, connected }) {
               />
             </div>
             
-            <button type="submit" className="primary-button">
+            <button type="submit" className="primary-button" disabled={!user || !connected}>
               Create Room
             </button>
           </form>
@@ -94,6 +196,8 @@ function Lobby({ onCreateRoom, onJoinRoom, connected }) {
             ← Back
           </button>
           
+          {renderAuthSection()}
+
           <h2>Join a Room</h2>
           <p className="subtitle">Enter the room code to join</p>
           
@@ -124,7 +228,7 @@ function Lobby({ onCreateRoom, onJoinRoom, connected }) {
               />
             </div>
             
-            <button type="submit" className="primary-button">
+            <button type="submit" className="primary-button" disabled={!user || !connected}>
               Join Room
             </button>
           </form>

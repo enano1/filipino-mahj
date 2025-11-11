@@ -15,8 +15,126 @@ const {
   isKong,
   isChow
 } = require('./gameLogic');
+const {
+  db: firebaseDb,
+  fieldValue: FirebaseFieldValue,
+  isFirebaseEnabled,
+  verifyIdToken
+} = require('./firebaseAdmin');
 
 const PORT = process.env.PORT || 3001;
+const FIREBASE_ACTIVE = isFirebaseEnabled();
+
+async function ensurePlayerProfile(uid, profile = {}) {
+  if (!FIREBASE_ACTIVE || !firebaseDb || !FirebaseFieldValue || !uid) {
+    return null;
+  }
+
+  try {
+    const playerRef = firebaseDb.collection('players').doc(uid);
+    const snapshot = await playerRef.get();
+    const timestamp = FirebaseFieldValue.serverTimestamp();
+
+    const baseData = {
+      displayName: profile.displayName || null,
+      email: profile.email || null,
+      photoURL: profile.photoURL || null,
+      updatedAt: timestamp
+    };
+
+    if (!snapshot.exists) {
+      await playerRef.set(
+        {
+          ...baseData,
+          displayName: baseData.displayName || 'Player',
+          totalGames: 0,
+          wins: 0,
+          losses: 0,
+          createdAt: timestamp
+        },
+        { merge: true }
+      );
+    } else {
+      await playerRef.set(baseData, { merge: true });
+    }
+
+    return playerRef;
+  } catch (error) {
+    console.error(`[Firebase] Failed to ensure player profile for uid=${uid}`, error);
+    return null;
+  }
+}
+
+async function recordGameResult(room, winningPlayerIndex) {
+  if (!FIREBASE_ACTIVE || !firebaseDb || !FirebaseFieldValue) {
+    return;
+  }
+
+  try {
+    const batch = firebaseDb.batch();
+    const timestamp = FirebaseFieldValue.serverTimestamp();
+    let hasWrites = false;
+
+    room.players.forEach((player, index) => {
+      if (!player || !player.uid) {
+        return;
+      }
+
+      const playerRef = firebaseDb.collection('players').doc(player.uid);
+      const statsUpdate = {
+        totalGames: FirebaseFieldValue.increment(1),
+        updatedAt: timestamp,
+        lastGameAt: timestamp,
+        lastRoom: room.code || null,
+        lastResult: index === winningPlayerIndex ? 'win' : 'loss'
+      };
+
+      if (index === winningPlayerIndex) {
+        statsUpdate.wins = FirebaseFieldValue.increment(1);
+      } else {
+        statsUpdate.losses = FirebaseFieldValue.increment(1);
+      }
+
+      batch.set(playerRef, statsUpdate, { merge: true });
+      hasWrites = true;
+    });
+
+    if (hasWrites) {
+      await batch.commit();
+      console.log('[Firebase] Recorded game result in Firestore');
+    }
+  } catch (error) {
+    console.error('[Firebase] Failed to record game result', error);
+  }
+}
+
+function normalizeDisplayName(name) {
+  if (!name) return null;
+  const trimmed = `${name}`.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, 40); // limit to 40 characters
+}
+
+function deriveDisplayName(requestedName, firebaseUser, fallbackNumber = 1) {
+  const normalizedRequested = normalizeDisplayName(requestedName);
+  if (normalizedRequested) {
+    return normalizedRequested;
+  }
+
+  if (firebaseUser) {
+    const claimsName =
+      firebaseUser.displayName ||
+      firebaseUser.name ||
+      firebaseUser.email ||
+      firebaseUser.uid;
+    const normalizedClaims = normalizeDisplayName(claimsName);
+    if (normalizedClaims) {
+      return normalizedClaims;
+    }
+  }
+
+  return `Player ${fallbackNumber}`;
+}
 
 function summarizePlayer(room, playerIndex) {
   const hand = room.hands[playerIndex] || [];
@@ -148,7 +266,7 @@ function createRoom(roomCode) {
   const wall = generateTileWall();
   return {
     code: roomCode,
-    players: [],
+    players: [null, null, null, null],
     state: 'waiting', // waiting, playing, finished
     wall: wall,
     hands: [[], [], [], []],
@@ -161,7 +279,8 @@ function createRoom(roomCode) {
     createdAt: Date.now(),
     lastActivity: Date.now(),
     maxIdleTime: 30 * 60 * 1000, // 30 minutes in milliseconds
-    playerNames: ['', '', '', ''] // Store player names for rejoin
+    playerNames: ['', '', '', ''], // Store player names for rejoin
+    playerIds: [null, null, null, null] // Track Firebase UIDs for rejoin
   };
 }
 
@@ -276,7 +395,7 @@ function broadcastGameState(room) {
           currentTurn: room.currentTurn,
           lastDiscard: room.lastDiscard,
           wallRemaining: room.wall.length,
-          players: room.players.map(p => p ? ({ id: p.id, name: p.name, isAI: p.isAI }) : null),
+          players: room.players.map(p => p ? ({ id: p.id, uid: p.uid || null, name: p.name, isAI: p.isAI }) : null),
           winner: room.winner,
           isTestRoom: room.isTestRoom,
           drawnTile: room.drawnTiles ? room.drawnTiles[index] : null
@@ -693,6 +812,7 @@ function handleClaim(room, playerIndex, claimType, tiles) {
     if (didWin) {
       room.winner = playerIndex;
       room.state = 'finished';
+      recordGameResult(room, playerIndex);
       broadcastToRoom(room, {
         type: 'game-won',
         winner: playerIndex,
@@ -755,85 +875,163 @@ function handlePass(room, playerIndex) {
 // WebSocket connection handler
 wss.on('connection', (ws) => {
   console.log('New client connected');
-  
+
   const clientId = uuidv4();
   let currentRoom = null;
   let playerIndex = -1;
-  
-  ws.on('message', (message) => {
+  let authUser = null;
+
+  const requireAuth = async (idToken) => {
+    if (!FIREBASE_ACTIVE) {
+      return null;
+    }
+
+    if (idToken) {
+      try {
+        authUser = await verifyIdToken(idToken);
+        return authUser;
+      } catch (error) {
+        console.warn('[Firebase] Invalid auth token', error);
+        throw new Error('Invalid authentication token');
+      }
+    }
+
+    if (authUser) {
+      return authUser;
+    }
+
+    throw new Error('Missing authentication token');
+  };
+
+  const persistProfile = async (user, displayName) => {
+    if (!user || !user.uid) {
+      return;
+    }
+
+    await ensurePlayerProfile(user.uid, {
+      displayName,
+      email: user.email || null,
+      photoURL: user.picture || user.photoURL || null
+    });
+  };
+
+  const findFirstAvailableSeat = (room) => {
+    const index = room.players.findIndex(player => !player);
+    return index === -1 ? room.players.length : index;
+  };
+
+  const sendError = (message, code = 'error') => {
+    ws.send(JSON.stringify({ type: 'error', message, code }));
+  };
+
+  ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      
+
       switch (data.type) {
-        case 'create-room':
+        case 'create-room': {
+          let firebaseUser = null;
+          try {
+            firebaseUser = await requireAuth(data.idToken);
+          } catch (authError) {
+            sendError(authError.message || 'Authentication required', 'auth');
+            break;
+          }
+
+          const roomOwnerName = deriveDisplayName(data.playerName, firebaseUser, 1);
+          await persistProfile(firebaseUser, roomOwnerName);
+
           let roomCode = generateRoomCode();
           while (rooms.has(roomCode)) {
             roomCode = generateRoomCode();
           }
-          
+
           const newRoom = createRoom(roomCode);
           rooms.set(roomCode, newRoom);
-          
+
           const player = {
             id: clientId,
-            name: data.playerName || `Player 1`,
-            ws
+            uid: firebaseUser ? firebaseUser.uid : null,
+            name: roomOwnerName,
+            ws,
+            isAI: false
           };
-          
-          newRoom.players.push(player);
+
+          newRoom.players[0] = player;
+          newRoom.playerNames[0] = player.name;
+          newRoom.playerIds[0] = player.uid;
+          newRoom.lastActivity = Date.now();
+
           currentRoom = newRoom;
           playerIndex = 0;
-          
+
           ws.send(JSON.stringify({
             type: 'room-created',
             roomCode,
             playerIndex: 0
           }));
           break;
-          
-        case 'join-room':
-          // Special test room 9999
-          if (data.roomCode === '9999') {
+        }
+
+        case 'join-room': {
+          const requestedRoomCode = data.roomCode;
+          if (!requestedRoomCode) {
+            sendError('Missing room code');
+            break;
+          }
+
+          const trimmedCode = requestedRoomCode.toUpperCase();
+
+          // Special test room 9999 (optional auth)
+          if (trimmedCode === '9999') {
             let testRoom = rooms.get('9999');
-            
+
             if (!testRoom) {
-              // Create test room with 3 AI players
               testRoom = createRoom('9999');
               testRoom.isTestRoom = true;
               testRoom.aiPlayers = [];
-              
-              // Create 3 AI players
+
               for (let i = 1; i < 4; i++) {
                 const aiPlayer = new AIPlayer(i, testRoom);
                 testRoom.aiPlayers.push(aiPlayer);
                 testRoom.players[i] = {
                   id: `ai-${i}`,
+                  uid: `ai-${i}`,
                   name: aiPlayer.name,
                   ws: null,
                   isAI: true
                 };
                 testRoom.playerNames[i] = aiPlayer.name;
+                testRoom.playerIds[i] = `ai-${i}`;
               }
-              
+
               rooms.set('9999', testRoom);
               console.log('🤖 Created test room 9999 with 3 AI players');
             }
-            
-            // Join as player 0 (human player)
+
+            const firebaseUser = FIREBASE_ACTIVE
+              ? await requireAuth(data.idToken).catch(() => null)
+              : null;
+
+            const humanName = deriveDisplayName(data.playerName, firebaseUser, 1);
+            await persistProfile(firebaseUser, humanName);
+
             const humanPlayer = {
               id: clientId,
-              name: data.playerName || 'Test Player',
+              uid: firebaseUser ? firebaseUser.uid : null,
+              name: humanName,
               ws,
               isAI: false
             };
-            
+
             testRoom.players[0] = humanPlayer;
-            testRoom.playerNames[0] = humanPlayer.name;
+            testRoom.playerNames[0] = humanName;
+            testRoom.playerIds[0] = humanPlayer.uid;
             testRoom.lastActivity = Date.now();
-            
+
             currentRoom = testRoom;
             playerIndex = 0;
-            
+
             ws.send(JSON.stringify({
               type: 'room-joined',
               roomCode: '9999',
@@ -847,94 +1045,104 @@ wss.on('connection', (ws) => {
                 currentTurn: testRoom.currentTurn,
                 lastDiscard: testRoom.lastDiscard,
                 wallRemaining: testRoom.wall.length,
-                players: testRoom.players.map(p => ({ id: p.id, name: p.name, isAI: p.isAI })),
+                players: testRoom.players.map(p => p ? ({ id: p.id, uid: p.uid || null, name: p.name, isAI: p.isAI }) : null),
                 winner: testRoom.winner
               } : null
             }));
-            
+
             broadcastToRoom(testRoom, {
               type: 'player-joined',
               playerCount: 4,
-              players: testRoom.players.map(p => ({ id: p.id, name: p.name, isAI: p.isAI })),
+              players: testRoom.players.map(p => p ? ({ id: p.id, uid: p.uid || null, name: p.name, isAI: p.isAI }) : null),
               isTestRoom: true
             });
-            
-            // Start game immediately in test room (always 4 players)
+
             if (testRoom.state === 'waiting') {
               setTimeout(() => startGame(testRoom), 1000);
             }
-            
+
             break;
           }
-          
-          // Regular room joining logic
-          const room = rooms.get(data.roomCode);
-          
+
+          const room = rooms.get(trimmedCode);
+
           if (!room) {
-            ws.send(JSON.stringify({
-              type: 'error',
-              message: 'Room not found'
-            }));
+            sendError('Room not found', 'room/not-found');
             break;
           }
-          
-          // Check if room has expired (30 minutes)
+
           const now = Date.now();
           if (now - room.lastActivity > room.maxIdleTime) {
             rooms.delete(room.code);
-            ws.send(JSON.stringify({
-              type: 'error',
-              message: 'Room has expired (30 minutes timeout)'
-            }));
+            sendError('Room has expired (30 minutes timeout)', 'room/expired');
             break;
           }
-          
-          // Check if this is a rejoin attempt
+
+          let firebaseUser = null;
+          if (FIREBASE_ACTIVE) {
+            try {
+              firebaseUser = await requireAuth(data.idToken);
+            } catch (authError) {
+              sendError(authError.message || 'Authentication required', 'auth');
+              break;
+            }
+          }
+
+          const desiredName = deriveDisplayName(data.playerName, firebaseUser, 1);
+          await persistProfile(firebaseUser, desiredName);
+
           let rejoinPlayerIndex = -1;
           let isRejoin = false;
-          
-          if (data.playerName && room.playerNames.includes(data.playerName)) {
-            // Player is rejoining
+
+          if (firebaseUser && room.playerIds.includes(firebaseUser.uid)) {
+            rejoinPlayerIndex = room.playerIds.indexOf(firebaseUser.uid);
+            isRejoin = true;
+          } else if (data.playerName && room.playerNames.includes(data.playerName)) {
             rejoinPlayerIndex = room.playerNames.indexOf(data.playerName);
             isRejoin = true;
-            
-            // Remove old WebSocket connection if exists
-            room.players = room.players.filter(p => p.id !== clientId);
-          } else {
-            // New player joining
-            if (room.players.length >= 4) {
-              ws.send(JSON.stringify({
-                type: 'error',
-                message: 'Room is full'
-              }));
-              break;
-            }
-            
-            if (room.state !== 'waiting' && !isRejoin) {
-              ws.send(JSON.stringify({
-                type: 'error',
-                message: 'Game already in progress. Use same name to rejoin.'
-              }));
-              break;
-            }
-            
-            rejoinPlayerIndex = room.players.length;
           }
-          
+
+          const occupiedCount = room.players.filter(p => p).length;
+
+          if (!isRejoin && occupiedCount >= 4) {
+            sendError('Room is full', 'room/full');
+            break;
+          }
+
+          if (!isRejoin && room.state !== 'waiting') {
+            sendError('Game already in progress. Use same account to rejoin.', 'room/in-progress');
+            break;
+          }
+
+          if (rejoinPlayerIndex === -1) {
+            rejoinPlayerIndex = findFirstAvailableSeat(room);
+          }
+
           const joiningPlayer = {
             id: clientId,
-            name: data.playerName || `Player ${rejoinPlayerIndex + 1}`,
-            ws
+            uid: firebaseUser ? firebaseUser.uid : null,
+            name: desiredName,
+            ws,
+            isAI: false
           };
-          
-          // Update player slot
+
+          const existingPlayer = room.players[rejoinPlayerIndex];
+          if (existingPlayer && existingPlayer.ws && existingPlayer.ws !== ws) {
+            try {
+              existingPlayer.ws.close(4001, 'Replaced by new connection');
+            } catch (error) {
+              console.warn('[Room] Failed to close previous socket on rejoin', error);
+            }
+          }
+
           room.players[rejoinPlayerIndex] = joiningPlayer;
           room.playerNames[rejoinPlayerIndex] = joiningPlayer.name;
+          room.playerIds[rejoinPlayerIndex] = joiningPlayer.uid;
           room.lastActivity = now;
-          
+
           currentRoom = room;
-          playerIndex = rejoinPlayerIndex; // Set the outer playerIndex
-          
+          playerIndex = rejoinPlayerIndex;
+
           ws.send(JSON.stringify({
             type: 'room-joined',
             roomCode: room.code,
@@ -948,54 +1156,58 @@ wss.on('connection', (ws) => {
               currentTurn: room.currentTurn,
               lastDiscard: room.lastDiscard,
               wallRemaining: room.wall.length,
-              players: room.players.map(p => ({ id: p.id, name: p.name })),
+              players: room.players.map(p => p ? ({ id: p.id, uid: p.uid || null, name: p.name, isAI: p.isAI }) : null),
               winner: room.winner
             } : null
           }));
-          
+
           broadcastToRoom(room, {
             type: 'player-joined',
             playerCount: room.players.filter(p => p).length,
-            players: room.players.map(p => p ? { id: p.id, name: p.name } : null),
+            players: room.players.map(p => p ? ({ id: p.id, uid: p.uid || null, name: p.name, isAI: p.isAI }) : null),
             isRejoin,
             rejoiningPlayer: isRejoin ? joiningPlayer.name : null
           });
-          
-          // Start game if 4 players and in waiting state
+
           if (room.players.filter(p => p).length === 4 && room.state === 'waiting') {
             setTimeout(() => startGame(room), 1000);
           }
           break;
-          
-        case 'draw':
+        }
+
+        case 'draw': {
           if (currentRoom && playerIndex !== -1) {
             console.log(`🂡 Player ${playerIndex + 1} (${currentRoom.code}) requested to DRAW`);
             handleDraw(currentRoom, playerIndex);
           }
           break;
-          
-        case 'discard':
+        }
+
+        case 'discard': {
           if (currentRoom && playerIndex !== -1 && data.tile) {
             console.log(`🂧 Player ${playerIndex + 1} (${currentRoom.code}) discarded request for ${data.tile}`);
             handleDiscard(currentRoom, playerIndex, data.tile);
           }
           break;
-          
-        case 'claim':
+        }
+
+        case 'claim': {
           if (currentRoom && playerIndex !== -1 && data.claimType) {
             console.log(`🂩 Player ${playerIndex + 1} (${currentRoom.code}) attempting claim ${data.claimType}${data.tiles ? ' with ' + JSON.stringify(data.tiles) : ''}`);
             handleClaim(currentRoom, playerIndex, data.claimType, data.tiles);
           }
           break;
-          
-        case 'pass':
+        }
+
+        case 'pass': {
           if (currentRoom && playerIndex !== -1) {
             console.log(`🀄 Player ${playerIndex + 1} (${currentRoom.code}) chose to PASS on claims`);
             handlePass(currentRoom, playerIndex);
           }
           break;
+        }
 
-        case 'force-draw':
+        case 'force-draw': {
           if (currentRoom && playerIndex !== -1) {
             console.log(`⚙️ Player ${playerIndex + 1} (${currentRoom.code}) requested FORCE DRAW`);
             const canDrawNow = playerCanDraw(currentRoom, playerIndex);
@@ -1034,35 +1246,35 @@ wss.on('connection', (ws) => {
             handleDraw(currentRoom, playerIndex);
           }
           break;
-          
-        case 'reset-test-room':
-          // Only allow reset for test room 9999
+        }
+
+        case 'reset-test-room': {
           if (currentRoom && currentRoom.code === '9999' && currentRoom.isTestRoom) {
             console.log('🔄 Resetting test room 9999');
-            
-            // Reset players array - keep human player at index 0, recreate AI players
+
             const humanPlayer = currentRoom.players[0];
             currentRoom.players = [humanPlayer, null, null, null];
-            currentRoom.playerNames = [humanPlayer.name, '', '', ''];
-            
-            // Recreate AI players
+            currentRoom.playerNames = [humanPlayer ? humanPlayer.name : '', '', '', ''];
+            currentRoom.playerIds = [humanPlayer ? humanPlayer.uid || null : null, null, null, null];
+
             currentRoom.aiPlayers = [];
             for (let i = 1; i < 4; i++) {
               const aiPlayer = new AIPlayer(i, currentRoom);
               currentRoom.aiPlayers.push(aiPlayer);
               currentRoom.players[i] = {
                 id: `ai-${i}`,
+                uid: `ai-${i}`,
                 name: aiPlayer.name,
                 ws: null,
                 isAI: true
               };
               currentRoom.playerNames[i] = aiPlayer.name;
+              currentRoom.playerIds[i] = `ai-${i}`;
             }
-            
-            // Reset room state
+
             const wall = generateTileWall();
             const { hands, remainingWall } = dealHands(wall);
-            
+
             currentRoom.wall = remainingWall;
             currentRoom.hands = hands;
             currentRoom.melds = [[], [], [], []];
@@ -1074,14 +1286,12 @@ wss.on('connection', (ws) => {
             currentRoom.winner = null;
             currentRoom.state = 'playing';
             currentRoom.lastActivity = Date.now();
-            
-            // Clear claim timer
+
             if (currentRoom.claimTimer) {
               clearTimeout(currentRoom.claimTimer);
               currentRoom.claimTimer = null;
             }
-            
-            // Handle auto-redraws for initial hands
+
             currentRoom.hands.forEach((hand, idx) => {
               let hasAutoRedraw = true;
               while (hasAutoRedraw && currentRoom.wall.length > 0) {
@@ -1096,41 +1306,46 @@ wss.on('connection', (ws) => {
               }
               currentRoom.hands[idx] = sortHand(hand);
             });
-            
+
             broadcastToRoom(currentRoom, {
               type: 'game-reset',
               message: '🔄 Test room reset! New game starting...'
             });
-            
+
             broadcastGameState(currentRoom);
-            
+
             console.log('✅ Test room reset complete - 1 human + 3 AI players');
           }
           break;
-          
+        }
+
         default:
           console.log('Unknown message type:', data.type);
       }
     } catch (error) {
       console.error('Error processing message:', error);
+      sendError('Unexpected server error processing request.', 'internal');
     }
   });
-  
+
   ws.on('close', () => {
     console.log('Client disconnected');
-    
+
     if (currentRoom) {
-      // Remove player from room
-      currentRoom.players = currentRoom.players.filter(p => p.id !== clientId);
-      
-      if (currentRoom.players.length === 0) {
-        // Delete empty room
+      if (playerIndex !== -1) {
+        currentRoom.players[playerIndex] = null;
+        currentRoom.playerNames[playerIndex] = '';
+        currentRoom.playerIds[playerIndex] = null;
+      }
+
+      const remainingPlayers = currentRoom.players.filter(p => p);
+
+      if (remainingPlayers.length === 0) {
         rooms.delete(currentRoom.code);
       } else {
-        // Notify remaining players
         broadcastToRoom(currentRoom, {
           type: 'player-left',
-          playerCount: currentRoom.players.length,
+          playerCount: remainingPlayers.length,
           message: 'A player has disconnected'
         });
       }
@@ -1175,3 +1390,4 @@ module.exports = {
   shouldEnableForceDraw,
   cleanupInterval
 };
+

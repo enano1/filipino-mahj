@@ -6,7 +6,7 @@ import OpponentDisplay from './OpponentDisplay';
 import DiscardPile from './DiscardPile';
 import ActionPanel from './ActionPanel';
 
-function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, onForceDraw, actionAvailable, isTestRoom, onResetTestRoom, message }) {
+function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, onForceDraw, onMahjong, actionAvailable, isTestRoom, onResetTestRoom, message }) {
   const [selectedTile, setSelectedTile] = useState(null);
   const [selectedChowOption, setSelectedChowOption] = useState(null);
   const [recentlyDiscarded, setRecentlyDiscarded] = useState(false);
@@ -36,6 +36,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const canDiscard = serverSaysMyTurn && totalTilesHeld === 14;
   const canForceDraw = serverSaysMyTurn && !canDraw && !canDiscard;
   const drawButtonEnabled = (canDraw || canForceDraw) && !drawLocked;
+  const canDeclareMahjong = serverSaysMyTurn && totalTilesHeld === 14;
   
   // Debug logging
   console.log(
@@ -124,6 +125,12 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
       setSelectedChowOption(null);
     } else if (claimType !== 'chow') {
       onClaim(claimType);
+    }
+  };
+
+  const handleMahjong = () => {
+    if (canDeclareMahjong) {
+      onMahjong();
     }
   };
 
@@ -292,6 +299,8 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
           onPass={onPass}
           selectedChowOption={selectedChowOption}
           onSelectChowOption={setSelectedChowOption}
+          onMahjong={handleMahjong}
+          mahjongEnabled={canDeclareMahjong}
         />
       </div>
 

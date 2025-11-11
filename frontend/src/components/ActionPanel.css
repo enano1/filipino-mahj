@@ -189,6 +189,22 @@
   border-color: #22d3ee;
 }
 
+.mahjong-btn {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  opacity: 0.6;
+}
+
+.mahjong-btn.available {
+  background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+  opacity: 1;
+}
+
+.mahjong-btn.available:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.6);
+  border-color: #f472b6;
+}
+
 /* Pass button */
 .pass-btn {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);

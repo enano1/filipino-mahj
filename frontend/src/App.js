@@ -235,6 +235,16 @@ function App() {
           setTimeout(() => setMessage(''), 3000);
           break;
           
+        case 'mahjong-invalid':
+          setMessage(data.message || 'Hand is not Mahjong yet.');
+          setTimeout(() => setMessage(''), 3000);
+          break;
+
+        case 'announcement':
+          setMessage(data.message);
+          setTimeout(() => setMessage(''), 3000);
+          break;
+
         case 'player-left':
           setMessage(data.message);
           break;
@@ -456,6 +466,10 @@ function App() {
     setActionAvailable(null);
   };
 
+  const declareMahjong = () => {
+    sendMessage({ type: 'mahjong' });
+  };
+
   const forceDraw = () => {
     sendMessage({ type: 'force-draw' });
   };
@@ -607,6 +621,7 @@ function App() {
             onClaim={claimTile}
             onPass={passClaim}
             onForceDraw={forceDraw}
+            onMahjong={declareMahjong}
             actionAvailable={actionAvailable}
             isTestRoom={roomCode === '9999'}
             onResetTestRoom={resetTestRoom}

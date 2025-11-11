@@ -851,6 +851,73 @@ function handleClaim(room, playerIndex, claimType, tiles) {
   }
 }
 
+// Handle player declaring Mahjong from their own hand
+function handleMahjong(room, playerIndex) {
+  if (room.state !== 'playing') return;
+
+  if (room.currentTurn !== playerIndex) {
+    console.log(`[MAHJONG] P${playerIndex + 1} attempted Mahjong but it's not their turn.`);
+    sendToPlayer(room.players[playerIndex], {
+      type: 'mahjong-invalid',
+      message: 'You can only declare Mahjong on your turn.'
+    });
+    return;
+  }
+
+  const hand = room.hands[playerIndex] || [];
+  const melds = room.melds[playerIndex] || [];
+
+  const totalTiles = summarizePlayer(room, playerIndex).totalTiles;
+
+  if (totalTiles < 14) {
+    console.log(`[MAHJONG] P${playerIndex + 1} attempted Mahjong with only ${totalTiles} tiles.`);
+    sendToPlayer(room.players[playerIndex], {
+      type: 'mahjong-invalid',
+      message: 'You need 14 tiles to declare Mahjong.'
+    });
+    return;
+  }
+
+  const didWin = checkWin(hand, melds);
+  console.log(
+    `[MAHJONG] Checking Mahjong for P${playerIndex + 1}: hand=${hand.join(', ') || 'empty'} | melds=${melds.map(m => `${m.type}:${m.tiles.join(' ')}`).join(' | ') || 'none'} | result=${didWin}`
+  );
+
+  if (didWin) {
+    room.winner = playerIndex;
+    room.state = 'finished';
+    room.lastActivity = Date.now();
+
+    if (room.claimTimer) {
+      clearTimeout(room.claimTimer);
+      room.claimTimer = null;
+    }
+
+    room.pendingActions = [];
+    room.lastDiscard = null;
+
+    recordGameResult(room, playerIndex);
+
+    broadcastToRoom(room, {
+      type: 'game-won',
+      winner: playerIndex,
+      message: `Player ${playerIndex + 1} wins!`
+    });
+
+    broadcastToRoom(room, {
+      type: 'announcement',
+      message: `🎉 Mahjong! Player ${playerIndex + 1} has won the hand!`
+    });
+
+    console.log(`[WIN] Player ${playerIndex + 1} declared Mahjong from their hand.`);
+  } else {
+    sendToPlayer(room.players[playerIndex], {
+      type: 'mahjong-invalid',
+      message: 'Not a winning hand yet. Keep playing!'
+    });
+  }
+}
+
 // Handle player passing on a claim
 function handlePass(room, playerIndex) {
   if (room.state !== 'playing') return;
@@ -1200,6 +1267,14 @@ wss.on('connection', (ws) => {
           break;
         }
 
+        case 'mahjong': {
+          if (currentRoom && playerIndex !== -1) {
+            console.log(`🀄 Player ${playerIndex + 1} (${currentRoom.code}) requested Mahjong check`);
+            handleMahjong(currentRoom, playerIndex);
+          }
+          break;
+        }
+
         case 'pass': {
           if (currentRoom && playerIndex !== -1) {
             console.log(`🀄 Player ${playerIndex + 1} (${currentRoom.code}) chose to PASS on claims`);
@@ -1384,6 +1459,7 @@ module.exports = {
   handleDraw,
   handleDiscard,
   handleClaim,
+  handleMahjong,
   summarizePlayer,
   detectMeldsInHand,
   playerCanDraw,

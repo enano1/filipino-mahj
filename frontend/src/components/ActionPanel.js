@@ -12,7 +12,9 @@ function ActionPanel({
   onClaim,
   onPass,
   selectedChowOption,
-  onSelectChowOption
+  onSelectChowOption,
+  onMahjong = () => {},
+  mahjongEnabled = false
 }) {
   const hasPong = actionAvailable && actionAvailable.type === 'pong';
   const hasKong = actionAvailable && actionAvailable.type === 'kong';
@@ -109,6 +111,15 @@ function ActionPanel({
               ⏭️ Pass
             </button>
           )}
+
+          <button
+            className={`action-btn claim-btn mahjong-btn ${mahjongEnabled ? 'available' : ''}`}
+            onClick={onMahjong}
+            disabled={!mahjongEnabled}
+            title={mahjongEnabled ? "Declare Mahjong and check for a win" : "Mahjong not available right now"}
+          >
+            🀄 Mahjong
+          </button>
         </div>
       </div>
     </div>

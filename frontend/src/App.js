@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { onIdTokenChanged, signInWithPopup, signOut } from 'firebase/auth';
 import './App.css';
 import Lobby from './components/Lobby';
 import GameBoard from './components/GameBoard';
 import EnvDebug from './EnvDebug';
+import { auth, googleProvider, hasFirebaseConfig } from './firebase';
 
 // WebSocket URL - must be set in environment variables for production
 const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:3001';
@@ -19,8 +21,93 @@ function App() {
   const [message, setMessage] = useState('');
   const [actionAvailable, setActionAvailable] = useState(null);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [authReady, setAuthReady] = useState(!hasFirebaseConfig);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authError, setAuthError] = useState(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   
   const wsRef = useRef(null);
+  const authTokenRef = useRef(null);
+
+  useEffect(() => {
+    if (!hasFirebaseConfig || !auth) {
+      setAuthReady(true);
+      return;
+    }
+
+    const unsubscribe = onIdTokenChanged(auth, async (user) => {
+      setCurrentUser(user);
+
+      if (user) {
+        try {
+          const token = await user.getIdToken();
+          authTokenRef.current = token;
+          setAuthError(null);
+        } catch (err) {
+          console.error('Failed to fetch Firebase ID token:', err);
+          authTokenRef.current = null;
+          setAuthError('Unable to refresh login. Please sign in again.');
+        }
+      } else {
+        authTokenRef.current = null;
+      }
+
+      setAuthReady(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const requestIdToken = async () => {
+    if (!auth || !auth.currentUser) {
+      setMessage('You need to sign in before playing.');
+      return null;
+    }
+
+    try {
+      const token = await auth.currentUser.getIdToken();
+      authTokenRef.current = token;
+      return token;
+    } catch (err) {
+      console.error('Failed to retrieve Firebase ID token', err);
+      setMessage('Session expired. Please sign in again.');
+      authTokenRef.current = null;
+      return null;
+    }
+  };
+
+  const handleSignIn = async () => {
+    if (!hasFirebaseConfig || !auth || !googleProvider) {
+      setAuthError('Firebase is not configured for the frontend.');
+      return;
+    }
+
+    setAuthError(null);
+    setIsSigningIn(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Sign-in failed', err);
+      setAuthError(err?.message || 'Failed to sign in. Please try again.');
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (!auth) return;
+    setIsSigningOut(true);
+    try {
+      await signOut(auth);
+      setMessage('Signed out successfully.');
+    } catch (err) {
+      console.error('Sign-out failed', err);
+      setAuthError('Failed to sign out. Please try again.');
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
 
   const connectWebSocket = useCallback(() => {
     const websocket = new WebSocket(WS_URL);
@@ -186,12 +273,27 @@ function App() {
     }
   };
 
+  const sendAuthedMessage = async (data) => {
+    const payload = { ...data };
+
+    if (hasFirebaseConfig) {
+      const token = await requestIdToken();
+      if (!token) {
+        return false;
+      }
+      payload.idToken = token;
+    }
+
+    sendMessage(payload);
+    return true;
+  };
+
   const createRoom = (playerName) => {
-    sendMessage({ type: 'create-room', playerName });
+    return sendAuthedMessage({ type: 'create-room', playerName });
   };
 
   const joinRoom = (code, playerName) => {
-    sendMessage({ type: 'join-room', roomCode: code, playerName });
+    return sendAuthedMessage({ type: 'join-room', roomCode: code, playerName });
   };
 
   const drawTile = () => {
@@ -249,6 +351,46 @@ function App() {
                 {connected ? '🟢 Connected' : '🔴 Disconnected'}
               </span>
               {roomCode && <span className="room-code">Room: {roomCode}</span>}
+              {hasFirebaseConfig && (
+                <div className="auth-status">
+                  {!authReady && <span className="auth-status-message">Loading account...</span>}
+                  {authReady && currentUser && (
+                    <>
+                      <div className="auth-user">
+                        {currentUser.photoURL && (
+                          <img
+                            className="auth-avatar"
+                            src={currentUser.photoURL}
+                            alt={currentUser.displayName || currentUser.email || 'Player avatar'}
+                          />
+                        )}
+                        <span className="auth-name">
+                          {currentUser.displayName || currentUser.email || 'Signed in'}
+                        </span>
+                      </div>
+                      <button
+                        className="auth-button"
+                        onClick={handleSignOut}
+                        disabled={isSigningOut}
+                      >
+                        {isSigningOut ? 'Signing out…' : 'Sign out'}
+                      </button>
+                    </>
+                  )}
+                  {authReady && !currentUser && (
+                    <button
+                      className="auth-button primary"
+                      onClick={handleSignIn}
+                      disabled={isSigningIn}
+                    >
+                      {isSigningIn ? 'Signing in…' : 'Sign in'}
+                    </button>
+                  )}
+                  {authReady && authError && (
+                    <span className="auth-status-message error">{authError}</span>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -260,6 +402,13 @@ function App() {
             onCreateRoom={createRoom}
             onJoinRoom={joinRoom}
             connected={connected}
+            user={currentUser}
+            authReady={authReady}
+            onSignIn={handleSignIn}
+            onSignOut={handleSignOut}
+            signingIn={isSigningIn}
+            signingOut={isSigningOut}
+            authError={authError}
           />
         ) : gameState ? (
           <GameBoard

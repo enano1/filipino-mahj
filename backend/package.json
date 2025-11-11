@@ -9,11 +9,11 @@
     "test": "node --test"
   },
   "dependencies": {
-    "ws": "^8.14.2",
-    "uuid": "^9.0.1"
+    "firebase-admin": "^13.6.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   }
 }
-

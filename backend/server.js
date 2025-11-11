@@ -402,11 +402,13 @@ function handleDiscard(room, playerIndex, tile) {
   );
   console.log(`[DISCARD]    Hand: ${discardSummary.hand.join(', ') || 'empty'}`);
   console.log(`[DISCARD]    Melds: ${discardMeldSummary}`);
-
+  console.log(`[TURN] Checking claim opportunities after discard by P${playerIndex + 1}`);
+  
   // Determine next player in turn order
   const nextPlayer = (playerIndex + 1) % 4;
   room.currentTurn = nextPlayer;
-
+  console.log(`[TURN] Next player set to P${nextPlayer + 1} after discard by P${playerIndex + 1}`);
+  
   // Set claim window - 10 seconds for claims
   room.claimWindowEnd = Date.now() + 10000;
   
@@ -433,10 +435,12 @@ function handleDiscard(room, playerIndex, tile) {
       playerIndex: nextPlayer,
       options: chowOptions
     });
+    console.log(`[TURN] Chow options available for P${nextPlayer + 1}: ${chowOptions.map(opt => opt.join('-')).join(' / ')}`);
   }
   
   if (room.pendingActions.length === 0) {
     // No claims possible, keep move with next player immediately
+    console.log(`[TURN] No claims available. P${nextPlayer + 1} should draw next.`);
   } else {
     // Set 5-second timer for claim window
     if (room.claimTimer) {
@@ -447,8 +451,11 @@ function handleDiscard(room, playerIndex, tile) {
       // If no one has claimed after 10 seconds, advance turn
       if (room.pendingActions.length > 0 && room.lastDiscard) {
         room.pendingActions = [];
+        const originalDiscarder = room.lastDiscard.playerIndex;
+        const nextPlayerIndex = (originalDiscarder + 1) % 4;
         room.lastDiscard = null;
-        room.currentTurn = (playerIndex + 1) % 4;
+        room.currentTurn = nextPlayerIndex;
+        console.log(`[TURN] Claim window expired. Moving to player P${nextPlayerIndex + 1}`);
         
         broadcastToRoom(room, {
           type: 'claim-window-expired',
@@ -672,6 +679,11 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         winner: playerIndex,
         message: `Player ${playerIndex + 1} wins!`
       });
+      broadcastToRoom(room, {
+        type: 'announcement',
+        message: `🎉 Mahjong! Player ${playerIndex + 1} has won the hand!`
+      });
+      console.log(`[WIN] Player ${playerIndex + 1} declared Mahjong.`);
     } else {
       // Set turn to claiming player (they must discard now with 14 tiles)
       room.currentTurn = playerIndex;
@@ -713,9 +725,10 @@ function handlePass(room, playerIndex) {
       clearTimeout(room.claimTimer);
       room.claimTimer = null;
     }
-    
+ 
     room.currentTurn = (room.lastDiscard.playerIndex + 1) % 4;
     room.lastDiscard = null;
+    console.log(`[TURN] All claims resolved. Moving to player P${room.currentTurn + 1}`);
     broadcastGameState(room);
   }
 }
@@ -960,6 +973,35 @@ wss.on('connection', (ws) => {
           if (currentRoom && playerIndex !== -1) {
             console.log(`🀄 Player ${playerIndex + 1} (${currentRoom.code}) chose to PASS on claims`);
             handlePass(currentRoom, playerIndex);
+          }
+          break;
+
+        case 'force-draw':
+          if (currentRoom && playerIndex !== -1) {
+            console.log(`⚙️ Player ${playerIndex + 1} (${currentRoom.code}) requested FORCE DRAW`);
+            if (currentRoom.currentTurn !== playerIndex) {
+              sendToPlayer(currentRoom.players[playerIndex], {
+                type: 'force-draw-denied',
+                message: 'Not your turn - cannot force draw.'
+              });
+              break;
+            }
+
+            if (currentRoom.claimTimer) {
+              clearTimeout(currentRoom.claimTimer);
+              currentRoom.claimTimer = null;
+            }
+
+            currentRoom.pendingActions = [];
+            currentRoom.lastDiscard = null;
+            currentRoom.claimWindowEnd = null;
+
+            sendToPlayer(currentRoom.players[playerIndex], {
+              type: 'force-draw',
+              message: 'Force draw activated. Attempting draw...'
+            });
+
+            handleDraw(currentRoom, playerIndex);
           }
           break;
           

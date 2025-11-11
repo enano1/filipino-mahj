@@ -1,6 +1,5 @@
 import React from 'react';
 import './ActionPanel.css';
-import Tile from './Tile';
 
 function ActionPanel({
   canDraw,
@@ -10,6 +9,8 @@ function ActionPanel({
   actionAvailable,
   onClaim,
   onPass,
+  canForceDraw,
+  onForceDraw,
   selectedChowOption,
   onSelectChowOption
 }) {
@@ -56,6 +57,15 @@ function ActionPanel({
             disabled={!canDraw}
           >
             🎴 Draw
+          </button>
+
+          <button
+            className="action-btn force-btn"
+            onClick={onForceDraw}
+            disabled={!canForceDraw}
+            title="Use if you're stuck and can't draw"
+          >
+            ⚙️ Force Draw
           </button>
           
           <button

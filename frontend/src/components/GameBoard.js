@@ -6,7 +6,7 @@ import OpponentDisplay from './OpponentDisplay';
 import DiscardPile from './DiscardPile';
 import ActionPanel from './ActionPanel';
 
-function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, actionAvailable, isTestRoom, onResetTestRoom, message }) {
+function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, onForceDraw, actionAvailable, isTestRoom, onResetTestRoom, message }) {
   const [selectedTile, setSelectedTile] = useState(null);
   const [selectedChowOption, setSelectedChowOption] = useState(null);
   const [recentlyDiscarded, setRecentlyDiscarded] = useState(false);
@@ -32,6 +32,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const effectiveMyTurn = serverSaysMyTurn && !recentlyDiscarded;
   const canDraw = effectiveMyTurn && totalTilesHeld === 13 && !safeLastDiscard;
   const canDiscard = serverSaysMyTurn && totalTilesHeld === 14;
+  const canForceDraw = serverSaysMyTurn && !canDraw;
   
   // Debug logging
   console.log(
@@ -51,7 +52,15 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
 
     if (!serverSaysMyTurn) {
       setRecentlyDiscarded(false);
-    } else if (safeLastDiscard && safeLastDiscard.playerIndex !== playerIndex) {
+      return;
+    }
+
+    if (!safeLastDiscard) {
+      setRecentlyDiscarded(false);
+      return;
+    }
+
+    if (safeLastDiscard.playerIndex !== playerIndex) {
       setRecentlyDiscarded(false);
     }
   }, [recentlyDiscarded, serverSaysMyTurn, safeLastDiscard, playerIndex]);
@@ -235,6 +244,8 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
           actionAvailable={actionAvailable}
           onClaim={handleClaim}
           onPass={onPass}
+          canForceDraw={canForceDraw}
+          onForceDraw={onForceDraw}
           selectedChowOption={selectedChowOption}
           onSelectChowOption={setSelectedChowOption}
         />

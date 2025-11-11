@@ -113,6 +113,16 @@ function App() {
           setMessage('⏱️ No claims - turn advancing');
           setTimeout(() => setMessage(''), 2000);
           break;
+
+        case 'force-draw':
+          setMessage('⚙️ Force draw triggered. You should be able to draw now.');
+          setTimeout(() => setMessage(''), 3000);
+          break;
+
+        case 'force-draw-denied':
+          setMessage('🚫 Force draw denied: ' + (data.message || 'Not your turn.'));
+          setTimeout(() => setMessage(''), 3000);
+          break;
           
         case 'game-won':
           setMessage(data.message);
@@ -202,6 +212,10 @@ function App() {
     setActionAvailable(null);
   };
 
+  const forceDraw = () => {
+    sendMessage({ type: 'force-draw' });
+  };
+
   const resetTestRoom = () => {
     if (roomCode === '9999') {
       sendMessage({ type: 'reset-test-room' });
@@ -241,6 +255,7 @@ function App() {
             onDiscard={discardTile}
             onClaim={claimTile}
             onPass={passClaim}
+            onForceDraw={forceDraw}
             actionAvailable={actionAvailable}
             isTestRoom={roomCode === '9999'}
             onResetTestRoom={resetTestRoom}

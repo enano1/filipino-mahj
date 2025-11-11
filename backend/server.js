@@ -457,7 +457,9 @@ function handleDiscard(room, playerIndex, tile) {
   
   if (room.pendingActions.length === 0) {
     // No claims possible, keep move with next player immediately
-    console.log(`[TURN] No claims available. P${nextPlayer + 1} should draw next.`);
+    console.log(`[TURN] No claims. Passing turn to P${room.currentTurn + 1}`);
+    room.lastDiscard = null;
+    room.claimWindowEnd = null;
   } else {
     // Set 5-second timer for claim window
     if (room.claimTimer) {

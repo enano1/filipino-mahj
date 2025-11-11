@@ -11,6 +11,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const [selectedChowOption, setSelectedChowOption] = useState(null);
   const [recentlyDiscarded, setRecentlyDiscarded] = useState(false);
   const [drawLocked, setDrawLocked] = useState(false);
+  const [winnerVisible, setWinnerVisible] = useState(false);
 
   const hasState =
     gameState &&
@@ -72,6 +73,14 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
       setDrawLocked(false);
     }
   }, [canDraw, canForceDraw]);
+
+  useEffect(() => {
+    if (gameState?.winner !== null) {
+      setWinnerVisible(true);
+    } else {
+      setWinnerVisible(false);
+    }
+  }, [gameState?.winner]);
 
   if (!hasState) {
     return (
@@ -169,13 +178,27 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
         </div>
         
         {isTestRoom && (
-          <button 
-            className="reset-test-btn"
-            onClick={onResetTestRoom}
-            title="Reset test room with new hands"
-          >
-            🔄 Reset Game
-          </button>
+          <div className="test-controls">
+            <button 
+              className="reset-test-btn"
+              onClick={onResetTestRoom}
+              title="Reset test room with new hands"
+            >
+              🔄 Reset Game
+            </button>
+            <button
+              className="test-win-btn"
+              onClick={() => {
+                setWinnerVisible(true);
+                if (typeof gameState.winner !== 'number') {
+                  gameState.winner = playerIndex;
+                }
+              }}
+              title="Show win overlay"
+            >
+              🏆 Show Win
+            </button>
+          </div>
         )}
       </div>
 
@@ -272,9 +295,18 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
         />
       </div>
 
-      {/* Winner Display */}
-      {gameState.winner !== null && (
-        <div className="winner-overlay">
+      {winnerVisible && gameState.winner !== null && (
+        <div
+          className="winner-overlay"
+          onClick={() => setWinnerVisible(false)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              setWinnerVisible(false);
+            }
+          }}
+        >
           <div className="winner-card">
             <h2>🎉 Game Over! 🎉</h2>
             <p className="winner-text">
@@ -282,6 +314,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
                 ? 'You Win!'
                 : `Player ${gameState.winner + 1} Wins!`}
             </p>
+            <p className="winner-dismiss">Click anywhere to continue</p>
           </div>
         </div>
       )}

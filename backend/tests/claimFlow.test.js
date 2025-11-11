@@ -182,6 +182,7 @@ test('turn advances correctly across a full rotation without claims', () => {
     const summaryAfterDiscard = summarizePlayer(room, playerIndex);
     assert.equal(summaryAfterDiscard.handCount, 13);
     assert.equal(room.currentTurn, (playerIndex + 1) % 4);
+    assert.equal(room.lastDiscard, null);
   }
 
   assert.equal(room.currentTurn, 0);

@@ -3,14 +3,13 @@ import './ActionPanel.css';
 
 function ActionPanel({
   canDraw,
+  drawLabel = '🎴 Draw',
   canDiscard,
   onDraw,
   onDiscard,
   actionAvailable,
   onClaim,
   onPass,
-  canForceDraw,
-  onForceDraw,
   selectedChowOption,
   onSelectChowOption
 }) {
@@ -56,16 +55,7 @@ function ActionPanel({
             onClick={onDraw}
             disabled={!canDraw}
           >
-            🎴 Draw
-          </button>
-
-          <button
-            className="action-btn force-btn"
-            onClick={onForceDraw}
-            disabled={!canForceDraw}
-            title="Use if you're stuck and can't draw"
-          >
-            ⚙️ Force Draw
+            {drawLabel}
           </button>
           
           <button

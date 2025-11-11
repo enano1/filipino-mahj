@@ -32,7 +32,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const effectiveMyTurn = serverSaysMyTurn && !recentlyDiscarded;
   const canDraw = effectiveMyTurn && totalTilesHeld === 13 && !safeLastDiscard;
   const canDiscard = serverSaysMyTurn && totalTilesHeld === 14;
-  const canForceDraw = serverSaysMyTurn && !canDraw;
+  const canForceDraw = serverSaysMyTurn && !canDraw && !canDiscard;
   
   // Debug logging
   console.log(
@@ -76,6 +76,14 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const handleTileClick = (tile) => {
     if (canDiscard) {
       setSelectedTile(tile);
+    }
+  };
+
+  const handleDraw = () => {
+    if (canDraw) {
+      onDraw();
+    } else if (canForceDraw) {
+      onForceDraw();
     }
   };
 
@@ -237,15 +245,14 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
         />
 
         <ActionPanel
-          canDraw={canDraw}
+          canDraw={canDraw || canForceDraw}
+          drawLabel={canForceDraw ? '⚙️ Force Draw' : '🎴 Draw'}
           canDiscard={canDiscard && selectedTile !== null}
-          onDraw={onDraw}
+          onDraw={handleDraw}
           onDiscard={handleDiscard}
           actionAvailable={actionAvailable}
           onClaim={handleClaim}
           onPass={onPass}
-          canForceDraw={canForceDraw}
-          onForceDraw={onForceDraw}
           selectedChowOption={selectedChowOption}
           onSelectChowOption={setSelectedChowOption}
         />

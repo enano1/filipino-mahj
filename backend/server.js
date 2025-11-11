@@ -34,6 +34,23 @@ function summarizePlayer(room, playerIndex) {
   };
 }
 
+function playerCanDraw(room, playerIndex) {
+  if (room.currentTurn !== playerIndex) return false;
+  const summary = summarizePlayer(room, playerIndex);
+  return summary.totalTiles === 13 && !room.lastDiscard;
+}
+
+function playerCanDiscard(room, playerIndex) {
+  if (room.currentTurn !== playerIndex) return false;
+  const summary = summarizePlayer(room, playerIndex);
+  return summary.totalTiles === 14;
+}
+
+function shouldEnableForceDraw(room, playerIndex) {
+  if (room.currentTurn !== playerIndex) return false;
+  return !playerCanDraw(room, playerIndex) && !playerCanDiscard(room, playerIndex);
+}
+
 function shuffleArray(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -979,10 +996,21 @@ wss.on('connection', (ws) => {
         case 'force-draw':
           if (currentRoom && playerIndex !== -1) {
             console.log(`⚙️ Player ${playerIndex + 1} (${currentRoom.code}) requested FORCE DRAW`);
-            if (currentRoom.currentTurn !== playerIndex) {
+            const canDrawNow = playerCanDraw(currentRoom, playerIndex);
+            const canDiscardNow = playerCanDiscard(currentRoom, playerIndex);
+
+            if (!shouldEnableForceDraw(currentRoom, playerIndex)) {
+              let reason = 'Force draw unavailable right now.';
+              if (currentRoom.currentTurn !== playerIndex) {
+                reason = 'Not your turn.';
+              } else if (canDrawNow) {
+                reason = 'You can draw normally.';
+              } else if (canDiscardNow) {
+                reason = 'You must discard before drawing.';
+              }
               sendToPlayer(currentRoom.players[playerIndex], {
                 type: 'force-draw-denied',
-                message: 'Not your turn - cannot force draw.'
+                message: reason
               });
               break;
             }
@@ -1140,5 +1168,8 @@ module.exports = {
   handleClaim,
   summarizePlayer,
   detectMeldsInHand,
+  playerCanDraw,
+  playerCanDiscard,
+  shouldEnableForceDraw,
   cleanupInterval
 };

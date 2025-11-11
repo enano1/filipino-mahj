@@ -2,15 +2,14 @@ import React from 'react';
 import './ActionPanel.css';
 
 function ActionPanel({
-  canDraw,
+  drawEnabled,
+  drawLabel = '🎴 Draw',
   canDiscard,
   onDraw,
   onDiscard,
   actionAvailable,
   onClaim,
   onPass,
-  canForceDraw,
-  onForceDraw,
   selectedChowOption,
   onSelectChowOption
 }) {
@@ -54,18 +53,9 @@ function ActionPanel({
           <button
             className="action-btn draw-btn"
             onClick={onDraw}
-            disabled={!canDraw}
+            disabled={!drawEnabled}
           >
-            🎴 Draw
-          </button>
-
-          <button
-            className="action-btn force-btn"
-            onClick={onForceDraw}
-            disabled={!canForceDraw}
-            title="Use if you're stuck and can't draw"
-          >
-            ⚙️ Force Draw
+            {drawLabel}
           </button>
           
           <button

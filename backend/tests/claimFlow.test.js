@@ -6,7 +6,8 @@ const {
   handleDraw,
   handleDiscard,
   handleClaim,
-  summarizePlayer
+  summarizePlayer,
+  shouldEnableForceDraw
 } = require('../server');
 const { sortHand } = require('../gameLogic');
 
@@ -320,5 +321,46 @@ test('current turn moves to next player when discard creates pending claims', ()
   assert.equal(room.pendingActions.length > 0, true);
   assert.equal(room.pendingActions[0].playerIndex, 1);
   assert.equal(room.lastDiscard.playerIndex, 0);
+});
+
+test('force draw disabled when normal draw available', () => {
+  const room = setupRoom();
+
+  room.hands[0] = sortHand([
+    'bamboo-1', 'bamboo-2', 'bamboo-3', 'character-1', 'character-2',
+    'character-3', 'dot-1', 'dot-2', 'dot-3', 'dot-4', 'dot-5', 'dot-6', 'dot-7'
+  ]);
+  room.currentTurn = 0;
+  room.lastDiscard = null;
+
+  assert.equal(shouldEnableForceDraw(room, 0), false);
+});
+
+test('force draw disabled when discard required', () => {
+  const room = setupRoom();
+
+  room.hands[0] = sortHand([
+    'bamboo-1', 'bamboo-2', 'bamboo-3', 'bamboo-4',
+    'character-1', 'character-2', 'character-3', 'character-4',
+    'dot-1', 'dot-2', 'dot-3', 'dot-4', 'dot-5', 'dot-6'
+  ]);
+  room.currentTurn = 0;
+  room.lastDiscard = null;
+
+  assert.equal(shouldEnableForceDraw(room, 0), false);
+});
+
+test('force draw enabled when stuck with lingering discard', () => {
+  const room = setupRoom();
+
+  room.hands[0] = sortHand([
+    'bamboo-1', 'bamboo-2', 'bamboo-3', 'character-1', 'character-2',
+    'character-3', 'dot-1', 'dot-2', 'dot-3', 'dot-4', 'dot-5', 'dot-6', 'dot-7'
+  ]);
+  room.currentTurn = 0;
+  room.lastDiscard = { tile: 'character-9', playerIndex: 3, timestamp: Date.now() };
+  room.pendingActions = [];
+
+  assert.equal(shouldEnableForceDraw(room, 0), true);
 });
 

@@ -2,7 +2,7 @@ import React from 'react';
 import './ActionPanel.css';
 
 function ActionPanel({
-  canDraw,
+  drawEnabled,
   drawLabel = '🎴 Draw',
   canDiscard,
   onDraw,
@@ -53,7 +53,7 @@ function ActionPanel({
           <button
             className="action-btn draw-btn"
             onClick={onDraw}
-            disabled={!canDraw}
+            disabled={!drawEnabled}
           >
             {drawLabel}
           </button>

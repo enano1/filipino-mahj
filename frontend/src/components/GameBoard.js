@@ -10,6 +10,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const [selectedTile, setSelectedTile] = useState(null);
   const [selectedChowOption, setSelectedChowOption] = useState(null);
   const [recentlyDiscarded, setRecentlyDiscarded] = useState(false);
+  const [drawLocked, setDrawLocked] = useState(false);
 
   const hasState =
     gameState &&
@@ -33,6 +34,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const canDraw = effectiveMyTurn && totalTilesHeld === 13 && !safeLastDiscard;
   const canDiscard = serverSaysMyTurn && totalTilesHeld === 14;
   const canForceDraw = serverSaysMyTurn && !canDraw && !canDiscard;
+  const drawButtonEnabled = (canDraw || canForceDraw) && !drawLocked;
   
   // Debug logging
   console.log(
@@ -65,6 +67,12 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     }
   }, [recentlyDiscarded, serverSaysMyTurn, safeLastDiscard, playerIndex]);
 
+  useEffect(() => {
+    if (!canDraw && !canForceDraw) {
+      setDrawLocked(false);
+    }
+  }, [canDraw, canForceDraw]);
+
   if (!hasState) {
     return (
       <div className="game-board">
@@ -80,6 +88,12 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   };
 
   const handleDraw = () => {
+    if (!drawButtonEnabled) {
+      return;
+    }
+
+    setDrawLocked(true);
+
     if (canDraw) {
       onDraw();
     } else if (canForceDraw) {
@@ -245,7 +259,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
         />
 
         <ActionPanel
-          canDraw={canDraw || canForceDraw}
+          drawEnabled={drawButtonEnabled}
           drawLabel={canForceDraw ? '⚙️ Force Draw' : '🎴 Draw'}
           canDiscard={canDiscard && selectedTile !== null}
           onDraw={handleDraw}

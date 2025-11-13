@@ -62,7 +62,7 @@ function ActionPanel({
             onClick={onDraw}
             disabled={!drawEnabled}
           >
-            {drawLabel}
+            {`${drawLabel} (D)`}
           </button>
           
           <button
@@ -70,7 +70,7 @@ function ActionPanel({
             onClick={onDiscard}
             disabled={!canDiscard}
           >
-            🗑️ Discard
+            🗑️ Discard (Del)
           </button>
           
           <div className="button-divider"></div>
@@ -82,7 +82,7 @@ function ActionPanel({
             disabled={!hasPong}
             title={hasPong ? "Claim 3 of the same tile" : "No Pong available"}
           >
-            🀄 Pong
+            🀄 Pong (P)
           </button>
           
           <button
@@ -91,7 +91,7 @@ function ActionPanel({
             disabled={!hasKong}
             title={hasKong ? "Claim 4 of the same tile" : "No Kong available"}
           >
-            🀅 Kong
+            🀅 Kong (K)
           </button>
           
           <button
@@ -100,7 +100,7 @@ function ActionPanel({
             disabled={!hasChow || (hasChow && !selectedChowOption)}
             title={hasChow ? "Claim sequence" : "No Chow available"}
           >
-            🀆 Chow
+            🀆 Chow (C)
           </button>
           
           {hasAnyClaim && (
@@ -118,7 +118,7 @@ function ActionPanel({
             disabled={!mahjongEnabled}
             title={mahjongEnabled ? "Declare Mahjong and check for a win" : "Mahjong not available right now"}
           >
-            🀄 Mahjong
+            🀄 Mahjong (M)
           </button>
         </div>
       </div>

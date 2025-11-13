@@ -67,6 +67,11 @@ async function ensurePlayerProfile(uid, profile = {}) {
 }
 
 async function recordGameResult(room, winningPlayerIndex) {
+  if (!room || room.isTestRoom) {
+    console.log('[Firebase] Skipping game result recording for test room.');
+    return;
+  }
+
   if (!FIREBASE_ACTIVE || !firebaseDb || !FirebaseFieldValue) {
     return;
   }
@@ -144,30 +149,188 @@ function summarizePlayer(room, playerIndex) {
     (sum, meld) => sum + (meld?.tiles?.length || 0),
     0
   );
+  const kongCount = melds.reduce(
+    (sum, meld) => sum + (meld?.type === 'kong' ? 1 : 0),
+    0
+  );
   return {
     hand,
     melds,
     handCount: hand.length,
     meldTileCount,
-    totalTiles: hand.length + meldTileCount
+    totalTiles: hand.length + meldTileCount,
+    kongCount,
+    baseTileCount: 13 + kongCount
   };
+}
+
+function feedKongTileToPlayer(room, playerIndex) {
+  if (!room || !room.isTestRoom) {
+    return { success: false, message: 'Only available in test rooms.' };
+  }
+
+  if (room.currentTurn !== playerIndex) {
+    return { success: false, message: 'Not your turn.' };
+  }
+
+  const hand = room.hands[playerIndex] || [];
+
+  const tileCounts = hand.reduce((acc, tile) => {
+    acc[tile] = (acc[tile] || 0) + 1;
+    return acc;
+  }, {});
+
+  const candidateTile = Object.keys(tileCounts).find(tile => tileCounts[tile] >= 3);
+
+  if (!candidateTile) {
+    return { success: false, message: 'No triple in hand to promote to a kong.' };
+  }
+
+  // Remove tile from wall or discard pile
+  let source = null;
+  const wallIndex = room.wall.indexOf(candidateTile);
+  if (wallIndex !== -1) {
+    room.wall.splice(wallIndex, 1);
+    source = 'wall';
+  } else {
+    const discardIndex = room.discardPile.lastIndexOf(candidateTile);
+    if (discardIndex !== -1) {
+      room.discardPile.splice(discardIndex, 1);
+      source = 'discard pile';
+    }
+  }
+
+  if (!source) {
+    source = 'test spawn';
+  }
+
+  room.wall.unshift(candidateTile);
+
+  // Clear claim windows to avoid conflicts
+  if (room.claimTimer) {
+    clearTimeout(room.claimTimer);
+    room.claimTimer = null;
+  }
+  room.pendingActions = [];
+  room.lastDiscard = null;
+  room.claimWindowEnd = null;
+
+  return { success: true, tile: candidateTile, source };
 }
 
 function playerCanDraw(room, playerIndex) {
   if (room.currentTurn !== playerIndex) return false;
   const summary = summarizePlayer(room, playerIndex);
-  return summary.totalTiles === 13 && !room.lastDiscard;
+  return summary.totalTiles === summary.baseTileCount && !room.lastDiscard;
 }
 
 function playerCanDiscard(room, playerIndex) {
   if (room.currentTurn !== playerIndex) return false;
   const summary = summarizePlayer(room, playerIndex);
-  return summary.totalTiles === 14;
+  return summary.totalTiles >= summary.baseTileCount + 1;
 }
 
 function shouldEnableForceDraw(room, playerIndex) {
   if (room.currentTurn !== playerIndex) return false;
   return !playerCanDraw(room, playerIndex) && !playerCanDiscard(room, playerIndex);
+}
+
+function drawKongReplacementTile(room) {
+  if (!room) return null;
+
+  if (room.wall.length === 0) {
+    if (room.discardPile.length === 0) {
+      console.log('[KONG_REPLACEMENT] Wall and discard pile empty - cannot draw replacement tile.');
+      return null;
+    }
+
+    const reshuffledTiles = shuffleArray([...room.discardPile]);
+    room.discardPile = [];
+    room.wall = reshuffledTiles;
+    room.lastDiscard = null;
+    console.log(
+      `[RESHUFFLE] Wall empty - reshuffled ${reshuffledTiles.length} tiles from discard pile back into the wall (kong replacement)`
+    );
+    broadcastToRoom(room, {
+      type: 'wall-reshuffled',
+      message: `Wall was empty - reshuffled ${reshuffledTiles.length} tiles from discards`
+    });
+  }
+
+  if (room.wall.length === 0) {
+    return null;
+  }
+
+  let drawnTile = room.wall.shift();
+  while (isAutoRedraw(drawnTile) && room.wall.length > 0) {
+    drawnTile = room.wall.shift();
+  }
+
+  return drawnTile;
+}
+
+function autoRevealConcealedKongs(room, playerIndex, initialTile) {
+  const hand = room.hands[playerIndex] || [];
+  const queue = [];
+  let highlightTile = initialTile;
+  let revealedAny = false;
+
+  if (initialTile) {
+    queue.push(initialTile);
+  }
+
+  while (queue.length > 0) {
+    const tile = queue.shift();
+    const tileCount = hand.filter(t => t === tile).length;
+
+    if (tileCount >= 4) {
+      revealedAny = true;
+      const meldTiles = [];
+      for (let i = 0; i < 4; i++) {
+        const idx = hand.indexOf(tile);
+        if (idx !== -1) {
+          meldTiles.push(hand.splice(idx, 1)[0]);
+        }
+      }
+
+      room.melds[playerIndex].push({
+        type: 'kong',
+        tiles: meldTiles,
+        concealed: true
+      });
+      sortHand(hand);
+
+      console.log(`[KONG_AUTO] P${playerIndex + 1} revealed concealed kong ${tile}`);
+
+      broadcastToRoom(room, {
+        type: 'announcement',
+        message: `Player ${playerIndex + 1} revealed a concealed kong of ${tile}.`
+      });
+
+      const replacementTile = drawKongReplacementTile(room);
+      if (replacementTile) {
+        hand.push(replacementTile);
+        sortHand(hand);
+        queue.push(replacementTile);
+        highlightTile = replacementTile;
+        console.log(
+          `[KONG_AUTO] P${playerIndex + 1} drew replacement tile ${replacementTile} for concealed kong ${tile}`
+        );
+      } else {
+        highlightTile = null;
+        console.log(
+          `[KONG_AUTO] P${playerIndex + 1} could not draw replacement tile for concealed kong ${tile}`
+        );
+      }
+    }
+  }
+
+  room.hands[playerIndex] = sortHand(hand);
+
+  return {
+    highlightTile,
+    revealedAny
+  };
 }
 
 function shuffleArray(array) {
@@ -216,9 +379,12 @@ class AIPlayer {
       }
 
       const hand = this.room.hands[this.playerIndex];
-      
-      // Simple AI: if we have 14 tiles, discard one randomly
-      if (hand.length === 14) {
+
+      const canDiscard = playerCanDiscard(this.room, this.playerIndex);
+      const canDraw = playerCanDraw(this.room, this.playerIndex);
+
+      // Simple AI: if we can discard, drop one randomly
+      if (canDiscard && hand.length > 0) {
         const randomTile = hand[Math.floor(Math.random() * hand.length)];
         
         // Use handleDiscard to ensure proper turn management
@@ -229,8 +395,8 @@ class AIPlayer {
           message: `${this.name} discarded ${randomTile}`
         });
       }
-      // If we have 13 tiles, draw one
-      else if (hand.length === 13) {
+      // If we need to draw, do so
+      else if (canDraw) {
         handleDraw(this.room, this.playerIndex);
       }
     }, 1000 + Math.random() * 2000); // Random delay 1-3 seconds
@@ -421,6 +587,14 @@ function broadcastGameState(room) {
 function handleDraw(room, playerIndex) {
   if (room.state !== 'playing') return;
   if (room.currentTurn !== playerIndex) return;
+  if (playerCanDiscard(room, playerIndex)) {
+    console.log(`[DRAW_DENIED] P${playerIndex + 1} attempted to draw but must discard first.`);
+    sendToPlayer(room.players[playerIndex], {
+      type: 'error',
+      message: 'You must discard a tile before drawing again.'
+    });
+    return;
+  }
   if (room.wall.length === 0) {
     if (room.discardPile.length === 0) {
       broadcastToRoom(room, {
@@ -465,8 +639,13 @@ function handleDraw(room, playerIndex) {
   }
   
   // Add the final tile to hand
-  room.hands[playerIndex].push(finalDrawnTile);
-  room.hands[playerIndex] = sortHand(room.hands[playerIndex]);
+  const hand = room.hands[playerIndex];
+  hand.push(finalDrawnTile);
+  sortHand(hand);
+
+  // Automatically reveal any concealed kongs completed by this draw
+  const { highlightTile } = autoRevealConcealedKongs(room, playerIndex, finalDrawnTile);
+  const effectiveDrawnTile = highlightTile !== undefined ? highlightTile : finalDrawnTile;
   
   const drawSummary = summarizePlayer(room, playerIndex);
   const meldSummaryString = drawSummary.melds.length > 0
@@ -482,7 +661,7 @@ function handleDraw(room, playerIndex) {
   if (!room.drawnTiles) {
     room.drawnTiles = [null, null, null, null];
   }
-  room.drawnTiles[playerIndex] = finalDrawnTile;
+  room.drawnTiles[playerIndex] = effectiveDrawnTile || null;
   
   // Clear last discard after drawing (new turn cycle)
   // If there were pending actions, they're now expired
@@ -717,32 +896,13 @@ function handleClaim(room, playerIndex, claimType, tiles) {
     });
     
     if (claimType === 'kong') {
-      // Kong: draw 1 tile
-      if (room.wall.length === 0 && room.discardPile.length > 0) {
-        const reshuffledTiles = shuffleArray([...room.discardPile]);
-        room.discardPile = [];
-        room.wall = reshuffledTiles;
-        room.lastDiscard = null;
-        console.log(
-          `[RESHUFFLE] Wall empty - reshuffled ${reshuffledTiles.length} tiles from discard pile back into the wall (kong replacement)`
-        );
-        broadcastToRoom(room, {
-          type: 'wall-reshuffled',
-          message: `Wall was empty - reshuffled ${reshuffledTiles.length} tiles from discards`
-        });
-      }
-
-      if (room.wall.length > 0) {
-        let drawnTile = room.wall.shift();
-        
-        // Auto-redraw if it's an honor/flower tile
-        while (isAutoRedraw(drawnTile) && room.wall.length > 0) {
-          drawnTile = room.wall.shift();
-        }
-        
-        hand.push(drawnTile);
-        console.log(`[CLAIM] P${playerIndex + 1} drew replacement tile ${drawnTile} for kong`);
-        lastDrawnDuringClaim = drawnTile;
+      const replacementTile = drawKongReplacementTile(room);
+      if (replacementTile) {
+        hand.push(replacementTile);
+        console.log(`[CLAIM] P${playerIndex + 1} drew replacement tile ${replacementTile} for kong`);
+        lastDrawnDuringClaim = replacementTile;
+      } else {
+        console.log(`[CLAIM] P${playerIndex + 1} could not draw replacement tile for kong`);
       }
     }
     room.hands[playerIndex] = sortHand(hand);
@@ -1320,6 +1480,28 @@ wss.on('connection', (ws) => {
             });
 
             handleDraw(currentRoom, playerIndex);
+          }
+          break;
+        }
+
+        case 'test-feed-kong': {
+          if (currentRoom && currentRoom.isTestRoom && playerIndex !== -1) {
+            console.log(`🀄 Player ${playerIndex + 1} (${currentRoom.code}) requested TEST FEED KONG`);
+            const result = feedKongTileToPlayer(currentRoom, playerIndex);
+            const player = currentRoom.players[playerIndex];
+
+            if (result.success) {
+              sendToPlayer(player, {
+                type: 'announcement',
+                message: `Test kong tile ${result.tile} moved from ${result.source}; it will be your next draw.`
+              });
+              broadcastGameState(currentRoom);
+            } else {
+              sendToPlayer(player, {
+                type: 'error',
+                message: result.message
+              });
+            }
           }
           break;
         }

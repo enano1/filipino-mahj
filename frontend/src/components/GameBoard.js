@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import './GameBoard.css';
 import Tile from './Tile';
 import PlayerHand from './PlayerHand';
@@ -12,6 +12,9 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const [recentlyDiscarded, setRecentlyDiscarded] = useState(false);
   const [drawLocked, setDrawLocked] = useState(false);
   const [winnerVisible, setWinnerVisible] = useState(false);
+  const [focusRow, setFocusRow] = useState('hand'); // 'hand' or 'chow'
+  const [focusedTileIndex, setFocusedTileIndex] = useState(null);
+  const [focusedChowIndex, setFocusedChowIndex] = useState(null);
 
   const hasState =
     gameState &&
@@ -19,9 +22,18 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     Array.isArray(gameState.melds) &&
     Array.isArray(gameState.players);
 
-  const safeHand = hasState ? gameState.hand : [];
-  const safeMelds = hasState ? gameState.melds : [[], [], [], []];
-  const safePlayers = hasState ? gameState.players : [];
+  const safeHand = useMemo(
+    () => (hasState ? gameState.hand : []),
+    [hasState, gameState?.hand]
+  );
+  const safeMelds = useMemo(
+    () => (hasState ? gameState.melds : [[], [], [], []]),
+    [hasState, gameState?.melds]
+  );
+  const safePlayers = useMemo(
+    () => (hasState ? gameState.players : []),
+    [hasState, gameState?.players]
+  );
   const safeCurrentTurn = hasState ? gameState.currentTurn : 0;
   const safeLastDiscard = hasState ? gameState.lastDiscard : null;
 
@@ -51,6 +63,8 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   useEffect(() => {
     if (!canDiscard && selectedTile !== null) {
       setSelectedTile(null);
+      setFocusedTileIndex(null);
+      setFocusRow('hand');
     }
   }, [canDiscard, selectedTile]);
 
@@ -88,21 +102,61 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     }
   }, [gameState?.winner]);
 
-  if (!hasState) {
-    return (
-      <div className="game-board">
-        <div className="loading">Loading game state...</div>
-      </div>
-    );
-  }
-
-  const handleTileClick = (tile) => {
-    if (canDiscard) {
-      setSelectedTile(tile);
+  useEffect(() => {
+    if (!canDiscard || !Array.isArray(gameState?.hand)) {
+      setFocusedTileIndex(null);
+      return;
     }
-  };
 
-  const handleDraw = () => {
+    if (selectedTile === null) {
+      setFocusedTileIndex(null);
+      return;
+    }
+
+    const idx = gameState.hand.findIndex((tile) => tile === selectedTile);
+    if (idx !== -1) {
+      setFocusedTileIndex(idx);
+    } else {
+      setFocusedTileIndex(null);
+    }
+  }, [canDiscard, gameState?.hand, selectedTile, focusRow]);
+
+  useEffect(() => {
+    if (!hasChow || chowOptions.length === 0) {
+      if (focusRow === 'chow') {
+        setFocusRow('hand');
+      }
+      setFocusedChowIndex(null);
+      return;
+    }
+
+    if (selectedChowOption) {
+      const idx = chowOptions.findIndex(
+        (option) => JSON.stringify(option) === JSON.stringify(selectedChowOption)
+      );
+      if (idx !== -1) {
+        setFocusedChowIndex(idx);
+      }
+    } else if (chowOptions.length === 1) {
+      setFocusedChowIndex(0);
+    }
+  }, [hasChow, chowOptions, selectedChowOption, focusRow]);
+
+  const handleTileClick = useCallback(
+    (tile) => {
+      if (canDiscard) {
+        const idx = safeHand.findIndex((handTile) => handTile === tile);
+        if (idx !== -1) {
+          setFocusedTileIndex(idx);
+        }
+        setSelectedTile(tile);
+        setFocusRow('hand');
+      }
+    },
+    [canDiscard, safeHand]
+  );
+
+  const handleDraw = useCallback(() => {
     if (!drawButtonEnabled) {
       return;
     }
@@ -114,30 +168,271 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     } else if (canForceDraw) {
       onForceDraw();
     }
-  };
+  }, [drawButtonEnabled, canDraw, onDraw, canForceDraw, onForceDraw, setDrawLocked]);
 
-  const handleDiscard = () => {
+  const handleDiscard = useCallback(() => {
     if (selectedTile) {
       onDiscard(selectedTile);
       setSelectedTile(null);
+      setFocusedTileIndex(null);
       setRecentlyDiscarded(true);
     }
-  };
+  }, [selectedTile, onDiscard]);
 
-  const handleClaim = (claimType) => {
-    if (claimType === 'chow' && selectedChowOption) {
-      onClaim(claimType, selectedChowOption);
-      setSelectedChowOption(null);
-    } else if (claimType !== 'chow') {
-      onClaim(claimType);
-    }
-  };
+  const handleClaim = useCallback(
+    (claimType) => {
+      if (claimType === 'chow' && selectedChowOption) {
+        onClaim(claimType, selectedChowOption);
+        setSelectedChowOption(null);
+        setFocusedChowIndex(null);
+        setFocusRow('hand');
+      } else if (claimType !== 'chow') {
+        onClaim(claimType);
+      }
+    },
+    [selectedChowOption, onClaim]
+  );
 
-  const handleMahjong = () => {
+  const handleMahjong = useCallback(() => {
     if (canDeclareMahjong) {
       onMahjong();
     }
-  };
+  }, [canDeclareMahjong, onMahjong]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.repeat) return;
+
+      const target = event.target;
+      if (
+        target &&
+        (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable
+        )
+      ) {
+        return;
+      }
+
+      const lowerKey = event.key.toLowerCase();
+
+      if (lowerKey === 'd') {
+        if (drawButtonEnabled) {
+          event.preventDefault();
+          handleDraw();
+        }
+        return;
+      }
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (canDiscard && selectedTile) {
+          event.preventDefault();
+          handleDiscard();
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        if (focusRow === 'hand' && canDiscard && safeHand.length > 0) {
+          const currentIndex =
+            focusedTileIndex !== null
+              ? focusedTileIndex
+              : (selectedTile
+                  ? safeHand.findIndex((tile) => tile === selectedTile)
+                  : null);
+
+          if (currentIndex !== null) {
+            const newIndex = Math.max(0, currentIndex - 1);
+            setFocusedTileIndex(newIndex);
+            setSelectedTile(safeHand[newIndex]);
+          } else {
+            const newIndex = safeHand.length - 1;
+            setFocusedTileIndex(newIndex);
+            setSelectedTile(safeHand[newIndex]);
+          }
+
+          setFocusRow('hand');
+          event.preventDefault();
+        } else if (focusRow === 'chow' && chowOptions.length > 0) {
+          const currentIndex =
+            focusedChowIndex !== null
+              ? focusedChowIndex
+              : (selectedChowOption
+                  ? chowOptions.findIndex(
+                      (option) =>
+                        JSON.stringify(option) === JSON.stringify(selectedChowOption)
+                    )
+                  : null);
+
+          if (currentIndex !== null && currentIndex >= 0) {
+            const newIndex = Math.max(0, currentIndex - 1);
+            setFocusedChowIndex(newIndex);
+            setSelectedChowOption(chowOptions[newIndex]);
+          } else {
+            const newIndex = chowOptions.length - 1;
+            setFocusedChowIndex(newIndex);
+            setSelectedChowOption(chowOptions[newIndex]);
+          }
+
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        if (focusRow === 'hand' && canDiscard && safeHand.length > 0) {
+          const currentIndex =
+            focusedTileIndex !== null
+              ? focusedTileIndex
+              : (selectedTile
+                  ? safeHand.findIndex((tile) => tile === selectedTile)
+                  : null);
+
+          if (currentIndex !== null) {
+            const newIndex = Math.min(safeHand.length - 1, currentIndex + 1);
+            setFocusedTileIndex(newIndex);
+            setSelectedTile(safeHand[newIndex]);
+          } else {
+            const newIndex = 0;
+            setFocusedTileIndex(newIndex);
+            setSelectedTile(safeHand[newIndex]);
+          }
+
+          setFocusRow('hand');
+          event.preventDefault();
+        } else if (focusRow === 'chow' && chowOptions.length > 0) {
+          const currentIndex =
+            focusedChowIndex !== null
+              ? focusedChowIndex
+              : (selectedChowOption
+                  ? chowOptions.findIndex(
+                      (option) =>
+                        JSON.stringify(option) === JSON.stringify(selectedChowOption)
+                    )
+                  : null);
+
+          const newIndex =
+            currentIndex !== null
+              ? Math.min(chowOptions.length - 1, currentIndex + 1)
+              : 0;
+
+          setFocusedChowIndex(newIndex);
+          setSelectedChowOption(chowOptions[newIndex]);
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        if (focusRow === 'hand' && chowOptions.length > 0) {
+          const currentIndex =
+            focusedChowIndex !== null
+              ? focusedChowIndex
+              : (selectedChowOption
+                  ? chowOptions.findIndex(
+                      (option) =>
+                        JSON.stringify(option) === JSON.stringify(selectedChowOption)
+                    )
+                  : 0);
+
+          const resolvedIndex =
+            currentIndex !== null && currentIndex >= 0 ? currentIndex : 0;
+
+          setFocusRow('chow');
+          setFocusedChowIndex(resolvedIndex);
+          setSelectedChowOption(chowOptions[resolvedIndex]);
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        if (focusRow === 'chow') {
+          setFocusRow('hand');
+          if (canDiscard && safeHand.length > 0) {
+            const currentIndex =
+              focusedTileIndex !== null
+                ? focusedTileIndex
+                : (selectedTile
+                    ? safeHand.findIndex((tile) => tile === selectedTile)
+                    : 0);
+
+            const resolvedIndex =
+              currentIndex !== null && currentIndex >= 0 ? currentIndex : 0;
+
+            setFocusedTileIndex(resolvedIndex);
+            setSelectedTile(safeHand[resolvedIndex]);
+          }
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (lowerKey === 'p') {
+        if (hasPong) {
+          event.preventDefault();
+          handleClaim('pong');
+        }
+        return;
+      }
+
+      if (lowerKey === 'k') {
+        if (hasKong) {
+          event.preventDefault();
+          handleClaim('kong');
+        }
+        return;
+      }
+
+      if (lowerKey === 'c') {
+        if (hasChow && selectedChowOption) {
+          event.preventDefault();
+          handleClaim('chow');
+        }
+        return;
+      }
+
+      if (lowerKey === 'm') {
+        if (canDeclareMahjong) {
+          event.preventDefault();
+          handleMahjong();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    drawButtonEnabled,
+    handleDraw,
+    canDiscard,
+    selectedTile,
+    handleDiscard,
+    hasPong,
+    hasKong,
+    hasChow,
+    selectedChowOption,
+    handleClaim,
+    canDeclareMahjong,
+    handleMahjong,
+    focusRow,
+    focusedTileIndex,
+    focusedChowIndex,
+    safeHand,
+    chowOptions
+  ]);
+
+  if (!hasState) {
+    return (
+      <div className="game-board">
+        <div className="loading">Loading game state...</div>
+      </div>
+    );
+  }
 
   // Calculate opponent positions from your perspective
   // Turn order: 1 → 2 → 3 → 4 → 1

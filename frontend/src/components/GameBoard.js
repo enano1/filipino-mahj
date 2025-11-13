@@ -6,7 +6,7 @@ import OpponentDisplay from './OpponentDisplay';
 import DiscardPile from './DiscardPile';
 import ActionPanel from './ActionPanel';
 
-function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, onForceDraw, onMahjong, actionAvailable, isTestRoom, onResetTestRoom, message }) {
+function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, onForceDraw, onFeedKongTile, onMahjong, actionAvailable, isTestRoom, onResetTestRoom, message }) {
   const [selectedTile, setSelectedTile] = useState(null);
   const [selectedChowOption, setSelectedChowOption] = useState(null);
   const [recentlyDiscarded, setRecentlyDiscarded] = useState(false);
@@ -30,13 +30,18 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
     (sum, meld) => sum + (meld?.tiles?.length || 0),
     0
   );
+  const kongCount = (safeMelds[playerIndex] || []).reduce(
+    (sum, meld) => sum + (meld?.type === 'kong' ? 1 : 0),
+    0
+  );
   const totalTilesHeld = safeHand.length + meldTileCount;
+  const baseTileCount = 13 + kongCount;
   const effectiveMyTurn = serverSaysMyTurn && !recentlyDiscarded;
-  const canDraw = effectiveMyTurn && totalTilesHeld === 13 && !safeLastDiscard;
-  const canDiscard = serverSaysMyTurn && totalTilesHeld === 14;
+  const canDraw = effectiveMyTurn && totalTilesHeld === baseTileCount && !safeLastDiscard;
+  const canDiscard = serverSaysMyTurn && totalTilesHeld >= baseTileCount + 1;
   const canForceDraw = serverSaysMyTurn && !canDraw && !canDiscard;
   const drawButtonEnabled = (canDraw || canForceDraw) && !drawLocked;
-  const canDeclareMahjong = serverSaysMyTurn && totalTilesHeld === 14;
+  const canDeclareMahjong = serverSaysMyTurn && totalTilesHeld === baseTileCount + 1;
   
   // Debug logging
   console.log(
@@ -192,6 +197,14 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
               title="Reset test room with new hands"
             >
               🔄 Reset Game
+            </button>
+            <button
+              className="test-feed-kong-btn"
+              onClick={onFeedKongTile}
+              title="Place a matching tile on top of the wall for your next draw"
+              disabled={!serverSaysMyTurn}
+            >
+              🀄 Feed Kong Tile
             </button>
             <button
               className="test-win-btn"

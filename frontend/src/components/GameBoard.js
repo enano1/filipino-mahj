@@ -55,6 +55,15 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const drawButtonEnabled = (canDraw || canForceDraw) && !drawLocked;
   const canDeclareMahjong = serverSaysMyTurn && totalTilesHeld === baseTileCount + 1;
   
+  // Claim availability
+  const hasPong = actionAvailable && actionAvailable.type === 'pong';
+  const hasKong = actionAvailable && actionAvailable.type === 'kong';
+  const hasChow = actionAvailable && actionAvailable.type === 'chow';
+  const chowOptions = useMemo(
+    () => (hasChow && actionAvailable?.options ? actionAvailable.options : []),
+    [hasChow, actionAvailable?.options]
+  );
+  
   // Debug logging
   console.log(
     `GameBoard Debug: hasState=${hasState}, serverTurn=${serverSaysMyTurn}, effectiveMyTurn=${effectiveMyTurn}, hand.length=${safeHand.length}, meldTileCount=${meldTileCount}, totalTiles=${totalTilesHeld}, canDraw=${canDraw}, canDiscard=${canDiscard}, lastDiscard=${safeLastDiscard ? safeLastDiscard.tile : 'none'}, currentTurn=${safeCurrentTurn}, playerIndex=${playerIndex}`

@@ -1,0 +1,33 @@
+# Exclude frontend from Railway builds (backend only)
+frontend/
+frontend/**/*
+
+# Exclude other unnecessary files
+*.md
+!README.md
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Documentation files
+DEPLOY*.md
+RAILWAY_FIX.md
+QUICKSTART.md
+FIXES.md
+
+# Exclude frontend build artifacts
+/build
+/dist
+
+# Keep backend but exclude its node_modules (will be installed fresh)
+backend/node_modules/
+
+# Exclude test files (optional, but can speed things up)
+backend/tests/
+backend/test.js
+
+# Exclude scripts not needed in production
+backend/scripts/
+!backend/scripts/awardWin.js
+

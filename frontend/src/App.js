@@ -224,6 +224,10 @@ function App() {
           
         case 'game-won':
           setMessage(data.message);
+          // Immediately update gameState with winner so overlay shows (will be confirmed by next game-state update)
+          if (data.winner !== undefined) {
+            setGameState(prev => prev ? { ...prev, winner: data.winner } : null);
+          }
           break;
           
         case 'game-over':

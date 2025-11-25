@@ -1058,6 +1058,8 @@ function handleMahjong(room, playerIndex) {
     });
 
     console.log(`[WIN] Player ${playerIndex + 1} declared Mahjong from their hand.`);
+    
+    broadcastGameState(room);
   } else {
     sendToPlayer(room.players[playerIndex], {
       type: 'mahjong-invalid',

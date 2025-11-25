@@ -104,12 +104,12 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   }, [canDraw, canForceDraw]);
 
   useEffect(() => {
-    if (gameState?.winner !== null) {
+    if (gameState && gameState.winner !== null && gameState.winner !== undefined) {
       setWinnerVisible(true);
     } else {
       setWinnerVisible(false);
     }
-  }, [gameState?.winner]);
+  }, [gameState, gameState?.winner]);
 
   useEffect(() => {
     if (!canDiscard || !Array.isArray(gameState?.hand)) {
@@ -641,7 +641,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
         />
       </div>
 
-      {winnerVisible && gameState.winner !== null && (
+      {winnerVisible && gameState && gameState.winner !== null && gameState.winner !== undefined && (
         <div
           className={`winner-overlay ${gameState.winner === playerIndex ? 'winner' : 'loser'}`}
           onClick={() => setWinnerVisible(false)}

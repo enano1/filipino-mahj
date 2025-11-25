@@ -38,6 +38,8 @@ async function ensurePlayerProfile(uid, profile = {}) {
     const snapshot = await playerRef.get();
     const timestamp = FirebaseFieldValue.serverTimestamp();
 
+    // Only update profile fields - never touch statistics (wins, losses, totalGames, etc.)
+    // Statistics are only updated by recordGameResult() function
     const baseData = {
       displayName: profile.displayName || null,
       email: profile.email || null,
@@ -46,6 +48,7 @@ async function ensurePlayerProfile(uid, profile = {}) {
     };
 
     if (!snapshot.exists) {
+      // Initialize new player document with zero statistics
       await playerRef.set(
         {
           ...baseData,
@@ -58,6 +61,7 @@ async function ensurePlayerProfile(uid, profile = {}) {
         { merge: true }
       );
     } else {
+      // Update existing document - only profile fields, preserve statistics
       await playerRef.set(baseData, { merge: true });
     }
 

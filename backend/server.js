@@ -73,6 +73,13 @@ async function recordGameResult(room, winningPlayerIndex) {
     return;
   }
 
+  // Don't record game results if the winner is an AI
+  const winningPlayer = room.players[winningPlayerIndex];
+  if (winningPlayer && winningPlayer.isAI) {
+    console.log(`[Firebase] Skipping game result recording - winner is AI (Player ${winningPlayerIndex + 1})`);
+    return;
+  }
+
   try {
     const batch = firebaseDb.batch();
     const timestamp = FirebaseFieldValue.serverTimestamp();

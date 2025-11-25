@@ -77,6 +77,24 @@ async function recordGameResult(room, winningPlayerIndex) {
     return;
   }
 
+  // Prevent duplicate recording - if game was already recorded, skip
+  if (room.gameResultRecorded) {
+    console.log(`[Firebase] Skipping duplicate game result recording for room ${room.code}`);
+    return;
+  }
+
+  // Only record if game is actually finished
+  if (room.state !== 'finished') {
+    console.log(`[Firebase] Skipping game result recording - game not finished (Room ${room.code}, state: ${room.state})`);
+    return;
+  }
+
+  // Validate winning player index
+  if (winningPlayerIndex < 0 || winningPlayerIndex >= 4) {
+    console.error(`[Firebase] Invalid winning player index: ${winningPlayerIndex}`);
+    return;
+  }
+
   // Don't record game results for test rooms
   if (room.isTestRoom) {
     console.log(`[Firebase] Skipping game result recording - test room (Room ${room.code})`);
@@ -121,6 +139,8 @@ async function recordGameResult(room, winningPlayerIndex) {
 
     if (hasWrites) {
       await batch.commit();
+      // Mark game as recorded to prevent duplicate recording
+      room.gameResultRecorded = true;
       console.log('[Firebase] Recorded game result in Firestore');
     }
   } catch (error) {

@@ -10,12 +10,20 @@
 
 **Impact:** High - Users could inflate their win counts, modify game history, etc.
 
-### 2. **Client-Side Write Access** ⚠️ HIGH
+### 2. **Duplicate Game Result Recording** ⚠️ CRITICAL
+**Issue:** No protection against recording the same game result multiple times:
+- If `recordGameResult()` is called multiple times (race condition, bug, or manipulation), statistics would be inflated
+- No validation that game state is 'finished' before recording
+- No check to prevent duplicate recording
+
+**Impact:** High - Same game could be recorded multiple times, inflating win/loss counts
+
+### 3. **Client-Side Write Access** ⚠️ HIGH
 **Issue:** Without security rules, the Firebase client SDK could write directly to Firestore documents.
 
 **Impact:** High - Direct manipulation of statistics from browser console
 
-### 3. **Profile Update Function** ⚠️ LOW
+### 4. **Profile Update Function** ⚠️ LOW
 **Issue:** The `ensurePlayerProfile` function uses `merge: true` which could theoretically overwrite fields if misused.
 
 **Impact:** Low - Function is only called server-side with controlled data, and only updates profile fields
@@ -30,15 +38,21 @@
 - **Allows authenticated users to read player documents** (needed for leaderboard)
 - **Prevents document deletion**
 
-### 2. Added Documentation
+### 2. Added Duplicate Recording Protection
+- **Added `gameResultRecorded` flag** to prevent recording the same game multiple times
+- **Added state validation** - only records if `room.state === 'finished'`
+- **Added winning player index validation** - ensures valid player index (0-3)
+- **Early return checks** - prevents processing if game already recorded
+
+### 3. Added Documentation
 - Created `FIRESTORE_SECURITY.md` with deployment instructions
 - Added comments to `ensurePlayerProfile` function clarifying it never touches statistics
 
-### 3. Backend Code Review
+### 4. Backend Code Review
 - Verified `recordGameResult()` is the only function that updates statistics
 - Confirmed it uses server-side Admin SDK (bypasses security rules)
 - Confirmed it uses atomic `increment()` operations
-- Confirmed it validates game state before recording
+- Added validation to prevent duplicate recording
 
 ## Deployment Steps
 
@@ -64,16 +78,22 @@
    - Uses Firebase Admin SDK which bypasses security rules
    - Only called when a game actually completes
 
-2. **Atomic Operations:**
+2. **Duplicate Recording Prevention:**
+   - `gameResultRecorded` flag prevents recording the same game twice
+   - State validation ensures game is finished before recording
+   - Winning player index validation prevents invalid data
+
+3. **Atomic Operations:**
    - Uses `FirebaseFieldValue.increment()` to prevent race conditions
    - Batch writes ensure consistency
 
-3. **Validation:**
+4. **Validation:**
    - Skips test rooms (`isTestRoom` check)
    - Skips AI players
    - Only records when game state is `finished`
+   - Validates winning player index is valid (0-3)
 
-4. **Client-Side Protection:**
+5. **Client-Side Protection:**
    - Security rules prevent direct writes
    - Frontend code only reads (no write operations)
    - Even if frontend code is modified, security rules block writes

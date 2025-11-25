@@ -512,7 +512,10 @@ function App() {
 
         {!headerCollapsed && (
           <>
-            <h1>🀄 Filipino Mahjong</h1>
+            <h1>
+              <img src="/favicon.png" alt="" className="header-favicon" />
+              Filipino Mahjong
+            </h1>
             <div className="status-bar">
               <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
                 {connected ? '🟢 Connected' : '🔴 Disconnected'}

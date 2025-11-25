@@ -38,6 +38,8 @@ async function ensurePlayerProfile(uid, profile = {}) {
     const snapshot = await playerRef.get();
     const timestamp = FirebaseFieldValue.serverTimestamp();
 
+    // Only update profile fields - never touch statistics (wins, losses, totalGames, etc.)
+    // Statistics are only updated by recordGameResult() function
     const baseData = {
       displayName: profile.displayName || null,
       email: profile.email || null,
@@ -46,6 +48,7 @@ async function ensurePlayerProfile(uid, profile = {}) {
     };
 
     if (!snapshot.exists) {
+      // Initialize new player document with zero statistics
       await playerRef.set(
         {
           ...baseData,
@@ -58,6 +61,7 @@ async function ensurePlayerProfile(uid, profile = {}) {
         { merge: true }
       );
     } else {
+      // Update existing document - only profile fields, preserve statistics
       await playerRef.set(baseData, { merge: true });
     }
 
@@ -70,6 +74,24 @@ async function ensurePlayerProfile(uid, profile = {}) {
 
 async function recordGameResult(room, winningPlayerIndex) {
   if (!FIREBASE_ACTIVE || !firebaseDb || !FirebaseFieldValue) {
+    return;
+  }
+
+  // Prevent duplicate recording - if game was already recorded, skip
+  if (room.gameResultRecorded) {
+    console.log(`[Firebase] Skipping duplicate game result recording for room ${room.code}`);
+    return;
+  }
+
+  // Only record if game is actually finished
+  if (room.state !== 'finished') {
+    console.log(`[Firebase] Skipping game result recording - game not finished (Room ${room.code}, state: ${room.state})`);
+    return;
+  }
+
+  // Validate winning player index
+  if (winningPlayerIndex < 0 || winningPlayerIndex >= 4) {
+    console.error(`[Firebase] Invalid winning player index: ${winningPlayerIndex}`);
     return;
   }
 
@@ -117,6 +139,8 @@ async function recordGameResult(room, winningPlayerIndex) {
 
     if (hasWrites) {
       await batch.commit();
+      // Mark game as recorded to prevent duplicate recording
+      room.gameResultRecorded = true;
       console.log('[Firebase] Recorded game result in Firestore');
     }
   } catch (error) {

@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Players collection - user profiles and statistics
+    match /players/{playerId} {
+      // Allow authenticated users to read any player document (needed for leaderboard)
+      allow read: if request.auth != null;
+      
+      // Prevent users from creating documents with statistics fields
+      // Statistics can only be set by the server using Admin SDK (which bypasses these rules)
+      allow create: if request.auth != null 
+        && request.auth.uid == playerId
+        && !('wins' in request.resource.data)
+        && !('losses' in request.resource.data)
+        && !('totalGames' in request.resource.data)
+        && !('lastResult' in request.resource.data)
+        && !('lastRoom' in request.resource.data)
+        && !('lastGameAt' in request.resource.data);
+      
+      // Prevent users from modifying statistics fields
+      // Only allow updates to profile fields (displayName, email, photoURL, updatedAt)
+      // Statistics (wins, losses, totalGames, lastResult, lastRoom, lastGameAt, createdAt) 
+      // can only be modified by the server using Admin SDK
+      allow update: if request.auth != null 
+        && request.auth.uid == playerId
+        // Check that no statistics fields are being added or modified
+        && !('wins' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('losses' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('totalGames' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('lastResult' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('lastRoom' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('lastGameAt' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('createdAt' in request.resource.data.diff(resource.data).affectedKeys())
+        // Ensure only allowed profile fields are being updated
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'email', 'photoURL', 'updatedAt']);
+      
+      // Prevent deletion of player documents
+      allow delete: if false;
+    }
+    
+    // Deny all other collections by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

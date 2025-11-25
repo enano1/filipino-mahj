@@ -526,9 +526,21 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
                   gameState.winner = playerIndex;
                 }
               }}
-              title="Show win overlay"
+              title="Show win overlay (you won)"
             >
               🏆 Show Win
+            </button>
+            <button
+              className="test-lose-btn"
+              onClick={() => {
+                setWinnerVisible(true);
+                // Set winner to a different player (loser scenario)
+                const loserPlayerIndex = (playerIndex + 1) % 4;
+                gameState.winner = loserPlayerIndex;
+              }}
+              title="Show lose overlay (you lost)"
+            >
+              😢 Show Lose
             </button>
           </div>
         )}
@@ -631,7 +643,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
 
       {winnerVisible && gameState.winner !== null && (
         <div
-          className="winner-overlay"
+          className={`winner-overlay ${gameState.winner === playerIndex ? 'winner' : 'loser'}`}
           onClick={() => setWinnerVisible(false)}
           role="button"
           tabIndex={0}
@@ -641,13 +653,18 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
             }
           }}
         >
-          <div className="winner-card">
-            <h2>🎉 Game Over! 🎉</h2>
-            <p className="winner-text">
-              {gameState.winner === playerIndex
-                ? 'You Win!'
-                : `Player ${gameState.winner + 1} Wins!`}
-            </p>
+          <div className={`winner-card ${gameState.winner === playerIndex ? 'winner-card-win' : 'winner-card-lose'}`}>
+            {gameState.winner === playerIndex ? (
+              <>
+                <h2>🎉 You Won! 🎉</h2>
+                <p className="winner-text">Congratulations! You have Mahjong!</p>
+              </>
+            ) : (
+              <>
+                <h2>😢 You Lost</h2>
+                <p className="winner-text">Player {gameState.winner + 1} has won the game.</p>
+              </>
+            )}
             <p className="winner-dismiss">Click anywhere to continue</p>
           </div>
         </div>

@@ -73,6 +73,12 @@ async function recordGameResult(room, winningPlayerIndex) {
     return;
   }
 
+  // Don't record game results for test rooms
+  if (room.isTestRoom) {
+    console.log(`[Firebase] Skipping game result recording - test room (Room ${room.code})`);
+    return;
+  }
+
   // Don't record game results if the winner is an AI
   const winningPlayer = room.players[winningPlayerIndex];
   if (winningPlayer && winningPlayer.isAI) {
@@ -375,8 +381,78 @@ function createRoom(roomCode) {
     maxIdleTime: 30 * 60 * 1000, // 30 minutes in milliseconds
     playerNames: ['', '', '', ''], // Store player names for rejoin
     playerIds: [null, null, null, null], // Track Firebase UIDs for rejoin
-    nextDrawAvailableAt: null
+    nextDrawAvailableAt: null,
+    closeTimer: null // Timer for auto-closing room after game ends
   };
+}
+
+// Close a room and notify all players
+function closeRoom(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) {
+    return; // Room already closed
+  }
+
+  console.log(`[ROOM] Closing room ${roomCode} after game ended`);
+
+  // Clear any timers
+  if (room.closeTimer) {
+    clearTimeout(room.closeTimer);
+    room.closeTimer = null;
+  }
+  if (room.claimTimer) {
+    clearTimeout(room.claimTimer);
+    room.claimTimer = null;
+  }
+
+  // Notify all players that the room is closing
+  broadcastToRoom(room, {
+    type: 'room-closing',
+    message: 'Room is closing. Returning to lobby...'
+  });
+
+  // Give players a moment to see the message, then disconnect
+  setTimeout(() => {
+    // Disconnect all players
+    room.players.forEach((player) => {
+      if (player && player.ws) {
+        try {
+          player.ws.close();
+        } catch (err) {
+          console.error(`[ROOM] Error closing connection for player:`, err);
+        }
+      }
+    });
+
+    // Delete the room
+    rooms.delete(roomCode);
+  }, 2000); // Wait 2 seconds before actually closing connections
+}
+
+// Schedule room to close 30 seconds after game ends
+function scheduleRoomClose(room) {
+  // Only schedule if room is finished and not already scheduled
+  if (room.state !== 'finished') {
+    console.log(`[ROOM] Cannot schedule room close - room ${room.code} is not in finished state`);
+    return;
+  }
+
+  // Clear any existing close timer
+  if (room.closeTimer) {
+    clearTimeout(room.closeTimer);
+    room.closeTimer = null;
+  }
+
+  // Set timer to close room after 30 seconds
+  room.closeTimer = setTimeout(() => {
+    // Double-check room is still finished before closing
+    const currentRoom = rooms.get(room.code);
+    if (currentRoom && currentRoom.state === 'finished') {
+      closeRoom(room.code);
+    }
+  }, 30000); // 30 seconds
+
+  console.log(`[ROOM] Room ${room.code} will close in 30 seconds`);
 }
 
 // Broadcast message to all players in a room
@@ -567,6 +643,9 @@ function handleDraw(room, playerIndex) {
         message: 'Game ended - no more tiles available!'
       });
       room.state = 'finished';
+      
+      // Schedule room to close after 30 seconds
+      scheduleRoomClose(room);
       return;
     }
 
@@ -978,6 +1057,12 @@ function handleClaim(room, playerIndex, claimType, tiles) {
         message: `🎉 Mahjong! Player ${playerIndex + 1} has won the hand!`
       });
       console.log(`[WIN] Player ${playerIndex + 1} declared Mahjong.`);
+      
+      // Broadcast final game state with winner
+      broadcastGameState(room);
+      
+      // Schedule room to close after 30 seconds
+      scheduleRoomClose(room);
     } else {
       // Set turn to claiming player (they must discard now with 14 tiles)
       room.currentTurn = playerIndex;
@@ -1067,6 +1152,9 @@ function handleMahjong(room, playerIndex) {
     console.log(`[WIN] Player ${playerIndex + 1} declared Mahjong from their hand.`);
     
     broadcastGameState(room);
+    
+    // Schedule room to close after 30 seconds
+    scheduleRoomClose(room);
   } else {
     sendToPlayer(room.players[playerIndex], {
       type: 'mahjong-invalid',
@@ -1555,6 +1643,12 @@ wss.on('connection', (ws) => {
             if (currentRoom.claimTimer) {
               clearTimeout(currentRoom.claimTimer);
               currentRoom.claimTimer = null;
+            }
+            
+            // Clear close timer if room was finished
+            if (currentRoom.closeTimer) {
+              clearTimeout(currentRoom.closeTimer);
+              currentRoom.closeTimer = null;
             }
 
             currentRoom.hands.forEach((hand, idx) => {

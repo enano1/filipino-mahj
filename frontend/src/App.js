@@ -234,6 +234,17 @@ function App() {
           setMessage(data.message);
           break;
           
+        case 'room-closing':
+          setMessage(data.message || 'Room is closing. Returning to lobby...');
+          setTimeout(() => {
+            // Clear room state and return to lobby
+            setRoomCode(null);
+            setGameState(null);
+            setPlayerIndex(-1);
+            setMessage('');
+          }, 2000); // Give 2 seconds to show the message
+          break;
+          
         case 'game-reset':
           setMessage(data.message);
           setTimeout(() => setMessage(''), 3000);

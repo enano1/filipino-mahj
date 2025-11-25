@@ -224,10 +224,25 @@ function App() {
           
         case 'game-won':
           setMessage(data.message);
+          // Immediately update gameState with winner so overlay shows (will be confirmed by next game-state update)
+          if (data.winner !== undefined) {
+            setGameState(prev => prev ? { ...prev, winner: data.winner } : null);
+          }
           break;
           
         case 'game-over':
           setMessage(data.message);
+          break;
+          
+        case 'room-closing':
+          setMessage(data.message || 'Room is closing. Returning to lobby...');
+          setTimeout(() => {
+            // Clear room state and return to lobby
+            setRoomCode(null);
+            setGameState(null);
+            setPlayerIndex(-1);
+            setMessage('');
+          }, 2000); // Give 2 seconds to show the message
           break;
           
         case 'game-reset':
@@ -508,7 +523,10 @@ function App() {
 
         {!headerCollapsed && (
           <>
-            <h1>🀄 Filipino Mahjong</h1>
+            <h1>
+              <img src="/favicon.png" alt="" className="header-favicon" />
+              Filipino Mahjong
+            </h1>
             <div className="status-bar">
               <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
                 {connected ? '🟢 Connected' : '🔴 Disconnected'}

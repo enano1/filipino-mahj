@@ -22,17 +22,19 @@
   right: 1rem;
   top: 50%;
   transform: translateY(-50%);
+  max-width: 180px;
 }
 
 .opponent-left {
   left: 1rem;
   top: 50%;
   transform: translateY(-50%);
+  max-width: 180px;
 }
 
 .opponent-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   margin-bottom: 0.5rem;
 }
@@ -58,12 +60,27 @@
 
 .opponent-melds {
   display: flex;
-  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+/* Horizontal layout for top position (Player 3) */
+.opponent-melds-top {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+/* Vertical layout for left and right positions (Players 2 & 4) */
+.opponent-melds-left,
+.opponent-melds-right {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .opponent-meld {
   display: flex;
+  flex-direction: row;
   gap: 0.15rem;
   background: rgba(255, 255, 255, 0.05);
   padding: 0.25rem;

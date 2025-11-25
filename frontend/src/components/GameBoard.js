@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import './GameBoard.css';
 import Tile from './Tile';
 import PlayerHand from './PlayerHand';
@@ -15,6 +15,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const [focusRow, setFocusRow] = useState('hand'); // 'hand' or 'chow'
   const [focusedTileIndex, setFocusedTileIndex] = useState(null);
   const [focusedChowIndex, setFocusedChowIndex] = useState(null);
+  const soundPlayedRef = useRef(false);
 
   const hasState =
     gameState &&
@@ -104,12 +105,47 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   }, [canDraw, canForceDraw]);
 
   useEffect(() => {
-    if (gameState?.winner !== null) {
+    if (gameState && gameState.winner !== null && gameState.winner !== undefined) {
       setWinnerVisible(true);
+      
+      // Play game over sound effect (only once per game)
+      // To add your own sound: Place a file named 'game-over.mp3' in frontend/public/
+      // Supported formats: MP3, WAV, OGG, M4A
+      // Sound will play for 15 seconds maximum
+      if (!soundPlayedRef.current) {
+        soundPlayedRef.current = true;
+        try {
+          const audio = new Audio('/game-over.mp3');
+          audio.volume = 0.5; // Adjust volume (0.0 to 1.0)
+          
+          // Stop playback after 15 seconds
+          const stopTimeout = setTimeout(() => {
+            audio.pause();
+            audio.currentTime = 0;
+          }, 15000);
+          
+          // Clean up timeout if audio ends naturally before 15 seconds
+          audio.addEventListener('ended', () => {
+            clearTimeout(stopTimeout);
+          });
+          
+          audio.play().catch(err => {
+            clearTimeout(stopTimeout);
+            // Silently fail if audio can't play (e.g., autoplay restrictions)
+            console.log('Could not play game over sound:', err);
+          });
+        } catch (err) {
+          console.log('Error creating game over sound:', err);
+        }
+      }
     } else {
       setWinnerVisible(false);
+      // Reset sound flag when game resets
+      if (gameState && gameState.winner === null) {
+        soundPlayedRef.current = false;
+      }
     }
-  }, [gameState?.winner]);
+  }, [gameState, gameState?.winner]);
 
   useEffect(() => {
     if (!canDiscard || !Array.isArray(gameState?.hand)) {
@@ -526,9 +562,21 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
                   gameState.winner = playerIndex;
                 }
               }}
-              title="Show win overlay"
+              title="Show win overlay (you won)"
             >
               🏆 Show Win
+            </button>
+            <button
+              className="test-lose-btn"
+              onClick={() => {
+                setWinnerVisible(true);
+                // Set winner to a different player (loser scenario)
+                const loserPlayerIndex = (playerIndex + 1) % 4;
+                gameState.winner = loserPlayerIndex;
+              }}
+              title="Show lose overlay (you lost)"
+            >
+              😢 Show Lose
             </button>
           </div>
         )}
@@ -629,9 +677,9 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
         />
       </div>
 
-      {winnerVisible && gameState.winner !== null && (
+      {winnerVisible && gameState && gameState.winner !== null && gameState.winner !== undefined && (
         <div
-          className="winner-overlay"
+          className={`winner-overlay ${gameState.winner === playerIndex ? 'winner' : 'loser'}`}
           onClick={() => setWinnerVisible(false)}
           role="button"
           tabIndex={0}
@@ -641,13 +689,18 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
             }
           }}
         >
-          <div className="winner-card">
-            <h2>🎉 Game Over! 🎉</h2>
-            <p className="winner-text">
-              {gameState.winner === playerIndex
-                ? 'You Win!'
-                : `Player ${gameState.winner + 1} Wins!`}
-            </p>
+          <div className={`winner-card ${gameState.winner === playerIndex ? 'winner-card-win' : 'winner-card-lose'}`}>
+            {gameState.winner === playerIndex ? (
+              <>
+                <h2>🎉 You Won! 🎉</h2>
+                <p className="winner-text">Congratulations! You have Mahjong!</p>
+              </>
+            ) : (
+              <>
+                <h2>😢 You Lost</h2>
+                <p className="winner-text">Player {gameState.winner + 1} has won the game.</p>
+              </>
+            )}
             <p className="winner-dismiss">Click anywhere to continue</p>
           </div>
         </div>

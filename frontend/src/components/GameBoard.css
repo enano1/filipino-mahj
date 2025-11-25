@@ -158,8 +158,8 @@
 }
 
 .reset-test-btn,
-.test-win-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+.test-win-btn,
+.test-lose-btn {
   color: white;
   border: 2px solid transparent;
   padding: 0.5rem 1.25rem;
@@ -171,12 +171,28 @@
   white-space: nowrap;
 }
 
+.reset-test-btn,
+.test-win-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
 .reset-test-btn:hover,
 .test-win-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.5);
   border-color: #fbbf24;
   background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+.test-lose-btn {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+.test-lose-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(107, 114, 128, 0.5);
+  border-color: #9ca3af;
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
 }
 
 
@@ -206,7 +222,7 @@
   background: rgba(0, 0, 0, 0.2);
   border-radius: 1rem;
   padding: 3rem;
-  min-height: 500px;
+  min-height: 550px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -361,12 +377,19 @@
 }
 
 .winner-card {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
   padding: 3rem;
   border-radius: 1rem;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   text-align: center;
   animation: scaleIn 0.5s ease-out;
+}
+
+.winner-card-win {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+.winner-card-lose {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
 }
 
 @keyframes scaleIn {
@@ -382,20 +405,45 @@
 
 .winner-card h2 {
   font-size: 2.5rem;
-  color: #1e3c72;
   margin-bottom: 1rem;
+}
+
+.winner-card-win h2 {
+  color: #1e3c72;
+}
+
+.winner-card-lose h2 {
+  color: #ffffff;
 }
 
 .winner-text {
   font-size: 2rem;
   font-weight: bold;
+}
+
+.winner-card-win .winner-text {
   color: #1e3c72;
+}
+
+.winner-card-lose .winner-text {
+  color: #ffffff;
 }
 
 .winner-dismiss {
   margin-top: 1.5rem;
   font-size: 1rem;
-  color: rgba(30, 60, 114, 0.8);
   font-weight: 600;
+}
+
+.winner-card-win .winner-dismiss {
+  color: rgba(30, 60, 114, 0.8);
+}
+
+.winner-card-lose .winner-dismiss {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.winner-overlay.loser {
+  background: rgba(0, 0, 0, 0.85);
 }
 

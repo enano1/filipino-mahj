@@ -12,7 +12,7 @@ function OpponentDisplay({ position, playerIndex, melds, isActive, isAI, name })
         </span>
         {isActive && <span className="active-indicator">🎯</span>}
       </div>
-      <div className="opponent-melds">
+      <div className={`opponent-melds opponent-melds-${position}`}>
         {melds.map((meld, idx) => (
           <div key={idx} className="opponent-meld">
             {meld.tiles.map((tile, tileIdx) => (

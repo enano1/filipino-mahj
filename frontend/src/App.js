@@ -478,6 +478,10 @@ function App() {
     sendMessage({ type: 'test-feed-kong' });
   };
 
+  const feedWinningTile = () => {
+    sendMessage({ type: 'test-feed-winning-tile' });
+  };
+
   const resetTestRoom = () => {
     if (roomCode === '9999') {
       sendMessage({ type: 'reset-test-room' });
@@ -626,6 +630,7 @@ function App() {
             onPass={passClaim}
             onForceDraw={forceDraw}
             onFeedKongTile={feedKongTile}
+            onFeedWinningTile={feedWinningTile}
             onMahjong={declareMahjong}
             actionAvailable={actionAvailable}
             isTestRoom={roomCode === '9999'}

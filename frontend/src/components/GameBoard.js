@@ -6,7 +6,7 @@ import OpponentDisplay from './OpponentDisplay';
 import DiscardPile from './DiscardPile';
 import ActionPanel from './ActionPanel';
 
-function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, onForceDraw, onFeedKongTile, onMahjong, actionAvailable, isTestRoom, onResetTestRoom, message }) {
+function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass, onForceDraw, onFeedKongTile, onFeedWinningTile, onMahjong, actionAvailable, isTestRoom, onResetTestRoom, message }) {
   const [selectedTile, setSelectedTile] = useState(null);
   const [selectedChowOption, setSelectedChowOption] = useState(null);
   const [recentlyDiscarded, setRecentlyDiscarded] = useState(false);
@@ -153,14 +153,14 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
 
   const handleTileClick = useCallback(
     (tile) => {
-      if (canDiscard) {
+    if (canDiscard) {
         const idx = safeHand.findIndex((handTile) => handTile === tile);
         if (idx !== -1) {
           setFocusedTileIndex(idx);
         }
-        setSelectedTile(tile);
+      setSelectedTile(tile);
         setFocusRow('hand');
-      }
+    }
     },
     [canDiscard, safeHand]
   );
@@ -190,14 +190,14 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
 
   const handleClaim = useCallback(
     (claimType) => {
-      if (claimType === 'chow' && selectedChowOption) {
-        onClaim(claimType, selectedChowOption);
-        setSelectedChowOption(null);
+    if (claimType === 'chow' && selectedChowOption) {
+      onClaim(claimType, selectedChowOption);
+      setSelectedChowOption(null);
         setFocusedChowIndex(null);
         setFocusRow('hand');
-      } else if (claimType !== 'chow') {
-        onClaim(claimType);
-      }
+    } else if (claimType !== 'chow') {
+      onClaim(claimType);
+    }
     },
     [selectedChowOption, onClaim]
   );
@@ -509,6 +509,14 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
               disabled={!serverSaysMyTurn}
             >
               🀄 Feed Kong Tile
+            </button>
+            <button
+              className="test-feed-winning-btn"
+              onClick={onFeedWinningTile}
+              title="Place the next tile you need to win on top of the wall"
+              disabled={!serverSaysMyTurn}
+            >
+              🎯 Feed Winning Tile
             </button>
             <button
               className="test-win-btn"

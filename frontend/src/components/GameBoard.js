@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import './GameBoard.css';
 import Tile from './Tile';
 import PlayerHand from './PlayerHand';
@@ -15,6 +15,7 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   const [focusRow, setFocusRow] = useState('hand'); // 'hand' or 'chow'
   const [focusedTileIndex, setFocusedTileIndex] = useState(null);
   const [focusedChowIndex, setFocusedChowIndex] = useState(null);
+  const soundPlayedRef = useRef(false);
 
   const hasState =
     gameState &&
@@ -106,8 +107,43 @@ function GameBoard({ gameState, playerIndex, onDraw, onDiscard, onClaim, onPass,
   useEffect(() => {
     if (gameState && gameState.winner !== null && gameState.winner !== undefined) {
       setWinnerVisible(true);
+      
+      // Play game over sound effect (only once per game)
+      // To add your own sound: Place a file named 'game-over.mp3' in frontend/public/
+      // Supported formats: MP3, WAV, OGG, M4A
+      // Sound will play for 15 seconds maximum
+      if (!soundPlayedRef.current) {
+        soundPlayedRef.current = true;
+        try {
+          const audio = new Audio('/game-over.mp3');
+          audio.volume = 0.5; // Adjust volume (0.0 to 1.0)
+          
+          // Stop playback after 15 seconds
+          const stopTimeout = setTimeout(() => {
+            audio.pause();
+            audio.currentTime = 0;
+          }, 15000);
+          
+          // Clean up timeout if audio ends naturally before 15 seconds
+          audio.addEventListener('ended', () => {
+            clearTimeout(stopTimeout);
+          });
+          
+          audio.play().catch(err => {
+            clearTimeout(stopTimeout);
+            // Silently fail if audio can't play (e.g., autoplay restrictions)
+            console.log('Could not play game over sound:', err);
+          });
+        } catch (err) {
+          console.log('Error creating game over sound:', err);
+        }
+      }
     } else {
       setWinnerVisible(false);
+      // Reset sound flag when game resets
+      if (gameState && gameState.winner === null) {
+        soundPlayedRef.current = false;
+      }
     }
   }, [gameState, gameState?.winner]);
 
